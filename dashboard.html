@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard — LifeLink Blood Network</title>
+
+    <!--
+      =====================================================================
+      BLANK DASHBOARD PLACEHOLDER
+      =====================================================================
+      This file is intentionally empty. The React dashboards already live in
+      src/pages/*.jsx and are routed by role in src/app.jsx (Hospital,
+      Blood Bank, Admin, Auditor). Keep this page as a clean canvas for a
+      future standalone dashboard.
+
+      How to talk to the backend (matches the contract in src/api/*):
+        1. Choose your base URL:
+             const API_BASE = "http://localhost:8080/api";   // or "/api"
+        2. Reuse the token the app stores after sign-in:
+             const token = localStorage.getItem("lifelink.token");
+        3. Call an endpoint, e.g. list requests:
+             const res = await fetch(`${API_BASE}/requests`, {
+               headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+             });
+             const { items } = await res.json();   // { items, total, page, pageSize }
+        4. Render into an element such as #dashboard-root below.
+
+      Available endpoints (see src/utils/constants.js → API_ENDPOINTS):
+        POST /auth/login   GET /auth/me
+        GET|POST /requests GET /requests/:id  PATCH|DELETE /requests/:id
+        GET /requests/:id/matches   POST /matches/:id/accept
+        GET|POST /inventory  GET /inventory/:id  PATCH|DELETE /inventory/:id
+        GET /alerts  PATCH /alerts/:id  POST /alerts/read-all
+        GET /audit   GET /stats/overview
+
+      Delete this comment once the dashboard is built.
+    -->
+
+    <style>
+      /* Minimal base so the placeholder renders sanely when opened directly. */
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+        background: #f4f6fb;
+        color: #101828;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Dashboard markup goes here. -->
+    <div id="dashboard-root"></div>
+  </body>
+</html>
