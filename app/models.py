@@ -147,6 +147,7 @@ class BloodInventory(Base):
         Index("ix_inventory_blood_group", "blood_group"),
         Index("ix_inventory_expiry", "expiry_date"),
         Index("ix_inventory_blood_bank", "blood_bank_id"),
+        Index("ix_inventory_group_component", "blood_group", "component_type"),
     )
 
 
@@ -191,6 +192,8 @@ class BloodRequest(Base):
         Index("ix_requests_status", "status"),
         Index("ix_requests_blood_group", "blood_group"),
         Index("ix_requests_timestamp", "request_timestamp"),
+        Index("ix_requests_hospital_status", "hospital_id", "status"),
+        Index("ix_requests_status_urgency_time", "status", "urgency", "request_timestamp"),
     )
 
 
@@ -244,6 +247,7 @@ class Reservation(Base):
         Index("ix_reservations_request", "request_id"),
         Index("ix_reservations_inventory", "inventory_id"),
         Index("ix_reservations_status", "status"),
+        Index("ix_reservations_status_expires", "status", "expires_at"),
     )
 
 
@@ -267,6 +271,7 @@ class Alert(Base):
         CheckConstraint(_in_clause("alert_type", ALERT_TYPES), name="ck_alerts_type"),
         Index("ix_alerts_request", "request_id"),
         Index("ix_alerts_user", "recipient_user_id"),
+        Index("ix_alerts_user_read", "recipient_user_id", "is_read"),
     )
 
 
