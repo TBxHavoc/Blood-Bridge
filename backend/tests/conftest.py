@@ -2,17 +2,25 @@
 
 from __future__ import annotations
 
+import secrets
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core import ratelimit
 from app.core.security import hash_password
 from app.database import Base, SessionLocal, engine
 from app.main import app
 
-TEST_PASSWORD = "Password123!"
+# Generated per run so no credential is committed in the source tree.
+TEST_PASSWORD = secrets.token_urlsafe(18)
+
+# `app.seed.seed` refuses to run with an empty password; supply one at test time.
+if not settings.seed_password:
+    settings.seed_password = TEST_PASSWORD
 
 
 @pytest.fixture(scope="session")

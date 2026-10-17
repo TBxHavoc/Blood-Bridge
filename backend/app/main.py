@@ -30,6 +30,15 @@ async def lifespan(_: FastAPI):
 
     Base.metadata.create_all(bind=engine)
     logger.info("Schema ensured (%d tables).", len(Base.metadata.tables))
+
+    # Guarantee the temporary admin login exists, sourced from the environment
+    # (git-ignored .env). Never let this block startup.
+    from app.seed.bootstrap import ensure_bootstrap_admin
+
+    try:
+        ensure_bootstrap_admin()
+    except Exception:  # noqa: BLE001 - bootstrap is best-effort
+        logger.exception("Bootstrap admin step failed; continuing startup.")
     yield
 
 

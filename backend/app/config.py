@@ -55,8 +55,16 @@ class Settings(BaseSettings):
     match_score_threshold: int = 50
     max_eta_minutes: int = 180
 
-    # --- Seed ---
-    seed_password: str = "Password123!"
+    # --- Seed / bootstrap credentials ---
+    # Never hardcode real credentials here: these are read from the environment
+    # (a git-ignored backend/.env) and default to empty so nothing ships in the
+    # repo. `seed_password` is used for the synthetic demo accounts; the
+    # bootstrap admin is (re)created at startup from ADMIN_USERNAME /
+    # ADMIN_PASSWORD so a temp login always exists without the credential ever
+    # living in code or reaching the browser.
+    seed_password: str = ""
+    admin_username: str = ""
+    admin_password: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:

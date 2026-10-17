@@ -81,6 +81,11 @@ def seed(
     write_csv: bool = True,
 ) -> dict[str, int]:
     random.seed(random_seed)
+    if not settings.seed_password:
+        raise RuntimeError(
+            "SEED_PASSWORD is not set; refusing to create demo accounts with an "
+            "empty password. Set it in backend/.env (git-ignored) or the environment."
+        )
     Base.metadata.create_all(bind=engine)
 
     bank_rows = generate.generate_blood_banks(banks)
