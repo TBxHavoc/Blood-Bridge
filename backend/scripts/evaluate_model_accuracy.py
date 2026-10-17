@@ -27,13 +27,13 @@ from sklearn.metrics import (
 )
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MODEL_PATH = os.path.join(BASE_DIR, "backend", "model", "depletion_model.pkl")
+MODEL_PATH = os.path.join(BASE_DIR, "models", "depletion_model.pkl")
 
 
 def load_model_bundle(path):
     if not os.path.exists(path):
-        # Fallback to alternate locations
-        alt = os.path.join(BASE_DIR, "backend", "models", "depletion_model.pkl")
+        # Fallback to alternate location
+        alt = os.path.join(BASE_DIR, "models", "depletion_model.pkl")
         path = alt if os.path.exists(alt) else path
     with open(path, "rb") as f:
         return pickle.load(f), path
@@ -43,7 +43,7 @@ def load_and_prepare_test_dataset(data_dir=None):
     if data_dir is None:
         data_dir = os.path.join(BASE_DIR, "datasets")
         if not os.path.exists(data_dir):
-            data_dir = os.path.join(BASE_DIR, "backend", "datasets")
+            data_dir = os.path.join(BASE_DIR, "..", "datasets")
 
     inv_path = os.path.join(data_dir, "blood_inventory.csv")
     req_path = os.path.join(data_dir, "blood_requests.csv")

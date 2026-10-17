@@ -43,8 +43,9 @@ docker compose up --build
 
 ## Layout
 
-The repository root contains a single folder, `backend/`, which holds
-everything below. Run all commands from inside `backend/`.
+The monorepo has two top-level folders: `backend/` (this FastAPI application and
+the ML pipeline) and `database/` (SQL schema, ORM models and documentation). Run
+all commands from inside `backend/`.
 
 ```
 backend/
@@ -55,14 +56,36 @@ backend/
     core/            Response envelope, errors, security, audit, masking
     api/             Routers (system, auth, requests, inventory, matching, ...)
     matching/        Matching engine: eligibility, priority, scoring, shortage
+    services/        Matching, reservations, forecasting (ML) services
     seed/            Synthetic dataset generator + loader
-  scripts/           Operational scripts (metrics report)
+  datasets/          Synthetic CSV snapshots (source of truth)
+  models/            depletion_model.pkl (trained ML bundle)
+  notebooks/         EDA + model-training notebook
+  docs/              ML_DEPLETION_MODEL.md
+  scripts/           ML pipeline + operations
+                     train_model.py, predict_depletion.py,
+                     evaluate_model_accuracy.py, test_trained_model.py, metrics.py
   tests/             Unit + integration tests
-  datasets/          Generated CSV snapshots (synthetic)
   Dockerfile         API image
   docker-compose.yml Local PostgreSQL + API
   requirements*.txt  Dependencies
   pyproject.toml     Ruff + pytest + coverage config
+```
+
+### ML pipeline
+
+```powershell
+# Train (writes models/depletion_model.pkl from datasets/)
+python scripts/train_model.py
+
+# Predict depletion / stockout tiers from the synthetic datasets
+python scripts/predict_depletion.py
+
+# Evaluate model accuracy and clinical-safety constraints
+python scripts/evaluate_model_accuracy.py
+
+# End-to-end model + service-layer integration test
+python scripts/test_trained_model.py
 ```
 
 ## Privacy invariants

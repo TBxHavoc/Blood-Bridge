@@ -1,5 +1,6 @@
-# Blood Bridge — local stack. PostgreSQL + FastAPI API + pgAdmin.
+# Blood Bridge - database stack. PostgreSQL 16 + pgAdmin 4.
 # Usage:  docker compose up -d
+# The schema, seed data and views are loaded automatically on first boot.
 
 services:
   # =============================================================================
@@ -26,22 +27,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-
-  # =============================================================================
-  # FastAPI Backend Service
-  # =============================================================================
-  api:
-    build: .
-    container_name: bloodbridge-api
-    environment:
-      DATABASE_URL: postgresql+psycopg://bloodbridge:bloodbridge@db:5432/bloodbridge
-      ENVIRONMENT: docker
-    ports:
-      - "8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
 
   # =============================================================================
   # pgAdmin 4 - Web UI Database Administration Console (Port 5050)

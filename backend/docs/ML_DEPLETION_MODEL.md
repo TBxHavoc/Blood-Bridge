@@ -60,7 +60,7 @@ You can run the model directly from the command line on your laptop or LinuxONE 
 
 ```bash
 # Run against the synthetic datasets
-python scripts/predict_depletion.py
+python backend/scripts/predict_depletion.py
 ```
 
 ### Sample Output:
@@ -165,7 +165,7 @@ Returns an executive summary dashboard showing total inventory lines monitored, 
 ## 5. Trained Machine Learning Artifact Integration (`depletion_model.pkl`)
 
 The production forecasting engine directly integrates the trained model artifact bundle located at:
-`backend/model/depletion_model.pkl` (also mirrored at `backend/models/depletion_model.pkl` and `database/models/depletion_model.pkl`).
+`backend/models/depletion_model.pkl`.
 
 ### Model Architecture:
 - **Continuous Runout Regressor**: `LightGBM` Gradient Boosted Decision Tree (`LGBMRegressor`) predicting continuous hours until stockout.
@@ -192,10 +192,10 @@ To test and verify the trained model bundle end-to-end:
 
 ```bash
 # Run comprehensive multi-scenario verification test
-python scripts/test_trained_model.py
+python backend/scripts/test_trained_model.py
 
 # Or specify a custom model path
-python scripts/test_trained_model.py --model "backend/model/depletion_model.pkl"
+python backend/scripts/test_trained_model.py --model "backend/models/depletion_model.pkl"
 
 # Run backend pytest suite
 pytest backend/tests/test_model_bundle.py backend/tests/test_p9_forecasting.py

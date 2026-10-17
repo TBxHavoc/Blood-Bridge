@@ -1,48 +1,80 @@
-# Blood Bridge — Backend & Database
+# Blood Bridge — Database
 ### IBM Z Datathon 2026 · AI Secured Track (Innovation without Exposure)
 
-Privacy-first AI coordination layer that matches emergency blood requests from
-hospitals to blood-bank inventory. It never receives patient or donor identity.
-Matching is rule-based, explainable and fully audited.
+Database layer for Blood Bridge: the ANSI SQL schema, dual-compatible SQLAlchemy
+ORM models, verification scripts and design documentation. The FastAPI application
+lives in [`../backend/`](../backend/README.md).
 
 > IBM Z Datathon 2026 · AI Secured track · 24-hour MVP · **all data is synthetic**
 > (`SIMULATED FOR DEMONSTRATION PURPOSES`).
 
 ---
 
-## ⚡ Stack & Architecture
+## ⚡ Stack
 
-- **FastAPI** + **SQLAlchemy 2.0** + **PostgreSQL 16** (Docker), matching engine as a
-  plain in-process Python module (no queues/workers).
-- `DATABASE_URL` is the single switch between PostgreSQL (local fallback) and Db2 on IBM LinuxONE (live demo) — no application code changes required (see `.env.example`).
-- Python 3.11+.
+- **PostgreSQL 16** (Docker) for local development; **Db2 on IBM LinuxONE** for the
+  live demo.
+- `DATABASE_URL` is the single switch between the two — no application code changes
+  required (see `.env.example`).
+- Python 3.11+ for the verification scripts.
 
 ---
 
-## 🚀 Quickstart (Local Development)
+## 🚀 Quickstart
 
-### 1. Start the Full Stack (PostgreSQL + API + pgAdmin)
+### 1. Start PostgreSQL (+ pgAdmin) with the schema pre-loaded
 ```powershell
 docker compose up -d
 ```
 - **PostgreSQL 16**: Port `5432` (`bloodbridge` db, auto-initialized with schema, seed data, and views)
-- **FastAPI API**: http://localhost:8000 (Swagger docs: http://localhost:8000/docs)
 - **pgAdmin 4**: http://localhost:5050 (Login: `admin@bloodbridge.sim` / `Admin2026!`)
 
-### 2. Or Run API Locally with Python
+### 2. Or apply the SQL manually
 ```powershell
-# Start database only
-docker compose up -d db
+# Against a running PostgreSQL instance, in order:
+psql -f sql/01_schema_postgresql.sql
+psql -f sql/03_seed_data.sql
+psql -f sql/04_queries_and_views.sql
+```
 
-# Create venv + install dependencies
-uv venv --python 3.11 .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+### 3. Run the verification suite
+```powershell
+python -m pip install -r requirements.txt
 
-# Configure environment
-Copy-Item .env.example .env
+# Verify schema tables, synthetic data counts, and Zero-Patient privacy compliance:
+python scripts/verify_db.py
 
-# Run FastAPI backend
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+# Test transactional holds, row-level locking, and double-allocation prevention:
+python scripts/test_hold_transaction.py
+
+# Verify the cryptographic SHA-256 hash chain of the audit trail:
+python scripts/audit_chain_verifier.py
+```
+
+---
+
+## 📁 Layout
+
+```
+database/
+├── sql/
+│   ├── 01_schema_postgresql.sql    # Complete ANSI PostgreSQL DDL with indexes & triggers
+│   ├── 02_schema_ibm_db2.sql       # IBM LinuxONE Db2 DDL (100% dialect-adapted)
+│   ├── 03_seed_data.sql            # Synthetic demo dataset (10 hospitals, 16 banks, 120+ units)
+│   └── 04_queries_and_views.sql    # Views for expiry alerts, anonymous demand, & fairness queue
+├── models/
+│   ├── __init__.py                 # Models package export
+│   └── db_models.py                # Dual-compatible SQLAlchemy 2.0 ORM models
+├── scripts/
+│   ├── verify_db.py                # Schema validation & Zero-Patient privacy compliance checker
+│   ├── test_hold_transaction.py    # Row locking (SELECT FOR UPDATE) concurrency test
+│   └── audit_chain_verifier.py     # Cryptographic SHA-256 audit log tamper-detection
+├── docs/
+│   ├── DATABASE_DESIGN.md          # Full Data Dictionary, ERD, and State Machine specs
+│   └── LINUXONE_MIGRATION_GUIDE.md # Instructions for attaching to IBM LinuxONE & Db2
+├── docker-compose.yml              # Local PostgreSQL 16 + pgAdmin
+├── pyproject.toml / requirements.txt
+└── .env.example                    # Dual-target template (PostgreSQL <-> LinuxONE Db2)
 ```
 
 ---
@@ -62,38 +94,6 @@ All users share the demo password: **`Demo2026!`**
 
 ---
 
-## 📁 Repository Layout
-
-```
-├── app/
-│   ├── main.py                     # FastAPI app factory
-│   ├── config.py                   # Settings (env-driven, switchable DATABASE_URL)
-│   ├── database.py                 # Engine, session, declarative Base
-│   ├── core/                       # Response envelope, errors, security, audit, masking
-│   ├── api/                        # Routers (system, auth, requests, inventory, matching)
-├── sql/
-│   ├── 01_schema_postgresql.sql    # Complete ANSI PostgreSQL DDL with indexes & triggers
-│   ├── 02_schema_ibm_db2.sql       # IBM LinuxONE Db2 DDL (100% dialect-adapted)
-│   ├── 03_seed_data.sql            # Synthetic demo dataset (10 hospitals, 16 banks, 120+ units)
-│   └── 04_queries_and_views.sql    # Views for expiry alerts, anonymous demand, & fairness queue
-├── models/
-│   ├── __init__.py                 # Models package export
-│   └── db_models.py                # Dual-compatible SQLAlchemy 2.0 ORM models
-├── scripts/
-│   ├── verify_db.py                # Schema validation & Zero-Patient privacy compliance checker
-│   ├── test_hold_transaction.py    # Row locking (SELECT FOR UPDATE) concurrency test
-│   └── audit_chain_verifier.py     # Cryptographic SHA-256 audit log tamper-detection
-├── docs/
-│   ├── DATABASE_DESIGN.md          # Full Data Dictionary, ERD, and State Machine specs
-│   └── LINUXONE_MIGRATION_GUIDE.md # Instructions for attaching to IBM LinuxONE & Db2
-├── tests/                          # Unit + integration tests
-├── docker-compose.yml              # Local PostgreSQL 16 + FastAPI + pgAdmin
-├── pyproject.toml / requirements.txt
-└── .env.example                    # Dual-target template (PostgreSQL <-> LinuxONE Db2)
-```
-
----
-
 ## 🛡️ Privacy Invariants (Verified)
 
 - **Zero Patient Identifiers**: No patient names, MRNs, Aadhaar, room numbers, or diagnoses (`FR-08`, `NFR-P1`).
@@ -102,21 +102,6 @@ All users share the demo password: **`Demo2026!`**
 - **Staged Disclosure**: Hospital name and delivery dock hidden from blood banks until hold confirmation (`NFR-P7`).
 - **Immutable Audit Logs**: Append-only enforcement via database trigger and SHA-256 hash chaining (`NFR-P5`, `FR-20`).
 - **Universal Portability**: Zero vendor lock-in. 100% ANSI types (`VARCHAR(36)` UUIDs, standard `CHECK` constraints, text IPs) for immediate attachment to IBM LinuxONE.
-
----
-
-## 🧪 Database & Compliance Tests
-
-```bash
-# 1. Verify schema tables, synthetic data counts, and Zero-Patient privacy compliance:
-python scripts/verify_db.py
-
-# 2. Test transactional holds, row-level locking, and double-allocation prevention:
-python scripts/test_hold_transaction.py
-
-# 3. Verify cryptographic SHA-256 hash chain of the audit trail:
-python scripts/audit_chain_verifier.py
-```
 
 ---
 

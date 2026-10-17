@@ -63,11 +63,8 @@ class BloodDepletionPredictor:
     """
 
     CANDIDATE_MODEL_PATHS = [
-        os.path.join("backend", "model", "depletion_model.pkl"),
         os.path.join("backend", "models", "depletion_model.pkl"),
-        os.path.join("model", "depletion_model.pkl"),
         os.path.join("models", "depletion_model.pkl"),
-        os.path.join("database", "models", "depletion_model.pkl"),
         "depletion_model.pkl",
     ]
 
@@ -90,7 +87,6 @@ class BloodDepletionPredictor:
         current_dir = os.path.dirname(os.path.abspath(__file__))
         app_dir = os.path.dirname(current_dir)
         backend_dir = os.path.dirname(app_dir)
-        paths_to_check.append(os.path.join(backend_dir, "model", "depletion_model.pkl"))
         paths_to_check.append(os.path.join(backend_dir, "models", "depletion_model.pkl"))
 
         for p in paths_to_check:

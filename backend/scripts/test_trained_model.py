@@ -4,12 +4,11 @@ Blood Bridge - ML Model Integration & Depletion Forecasting Verification Test
 IBM Z Datathon 2026 - AI Secured Track (Innovation without Exposure)
 
 Target Model File:
-    backend/model/depletion_model.pkl
+    backend/models/depletion_model.pkl
 
-Usage:
-    python scripts/test_trained_model.py
-    python scripts/test_trained_model.py --model "backend/model/depletion_model.pkl"
-    python scripts/test_trained_model.py --csv datasets/
+Usage (from the repository root):
+    python backend/scripts/test_trained_model.py
+    python backend/scripts/test_trained_model.py --model "backend/models/depletion_model.pkl"
 """
 
 import os
@@ -19,11 +18,8 @@ import pickle
 import argparse
 from datetime import datetime, date, timedelta, timezone
 
-# Add backend to path so backend services can be tested
+# Make the backend app package importable so the service layer can be tested.
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BACKEND_DIR = os.path.join(BASE_DIR, "backend")
-if BACKEND_DIR not in sys.path:
-    sys.path.insert(0, BACKEND_DIR)
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
@@ -32,12 +28,10 @@ def find_model_path(explicit_path=None):
     if explicit_path and os.path.exists(explicit_path):
         return explicit_path
     candidates = [
-        os.path.join(BASE_DIR, "backend", "model", "depletion_model.pkl"),
-        os.path.join(BASE_DIR, "backend", "models", "depletion_model.pkl"),
-        os.path.join(BASE_DIR, "database", "models", "depletion_model.pkl"),
-        os.path.join(BASE_DIR, "model", "depletion_model.pkl"),
         os.path.join(BASE_DIR, "models", "depletion_model.pkl"),
-        "backend/model/depletion_model.pkl",
+        os.path.join(BASE_DIR, "..", "models", "depletion_model.pkl"),
+        "backend/models/depletion_model.pkl",
+        "models/depletion_model.pkl",
     ]
     for c in candidates:
         if os.path.exists(c):
