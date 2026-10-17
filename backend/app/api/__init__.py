@@ -9,6 +9,7 @@ from app.api import (
     alerts,
     audit,
     auth,
+    forecasting,
     inventory,
     requests,
     reservations,
@@ -25,3 +26,5 @@ api_router.include_router(requests.match_router)
 api_router.include_router(reservations.router)
 api_router.include_router(alerts.router)
 api_router.include_router(audit.router)
+api_router.include_router(forecasting.router)
+
