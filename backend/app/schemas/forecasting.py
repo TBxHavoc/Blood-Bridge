@@ -45,12 +45,15 @@ class DepletionPredictionOut(BaseModel):
     confidence_interval_hours: Tuple[float, float]
     earliest_batch_expiry: Optional[date] = None
     depletion_cause: str
+    model_source: Optional[str] = None
 
 
 class ForecastingDashboardOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     generated_at: datetime
+    ml_model_loaded: bool = False
+    model_path: Optional[str] = None
     total_inventory_items_monitored: int
     critical_stockouts_count: int
     high_risk_stockouts_count: int

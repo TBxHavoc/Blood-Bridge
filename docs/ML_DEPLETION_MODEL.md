@@ -162,8 +162,50 @@ Returns an executive summary dashboard showing total inventory lines monitored, 
 
 ---
 
-## 5. IBM LinuxONE & Zero-Exposure Fit
+## 5. Trained Machine Learning Artifact Integration (`depletion_model.pkl`)
+
+The production forecasting engine directly integrates the trained model artifact bundle located at:
+`backend/model/depletion_model.pkl` (also mirrored at `backend/models/depletion_model.pkl` and `database/models/depletion_model.pkl`).
+
+### Model Architecture:
+- **Continuous Runout Regressor**: `LightGBM` Gradient Boosted Decision Tree (`LGBMRegressor`) predicting continuous hours until stockout.
+- **Stockout Urgency Classifier**: `Random Forest Classifier` (`RandomForestClassifier`) predicting urgency risk tiers (`IMMEDIATE_EMPTY`, `CRITICAL < 24h`, `HIGH 1-3d`, `MODERATE 3-7d`, `STABLE > 7d`).
+- **Feature Vector**:
+  - `feat_bg`: Categorical LabelEncoded Blood Group (`O+`, `O-`, `A+`, etc.)
+  - `feat_ct`: Categorical LabelEncoded Component Type (`RBC`, `WHOLE_BLOOD`)
+  - `feat_city`: Categorical LabelEncoded Geographic City
+  - `total_unreserved`: Available minus reserved units
+  - `total_available`: Total on-hand units
+  - `total_reserved`: Clinical reserved hold
+  - `days_to_expiry`: Days until earliest batch expiration
+  - `bank_daily_burn`: Apportioned regional consumption rate
+  - `capacity_units`: Facility storage capacity
+  - `avg_urgency`: Regional request clinical urgency score
+- **Biological Expiration Bounding**: Predictions are physically constrained by $H_{\max} = \text{days\_to\_expiry} \times 24$ hours.
+- **Resilient Fallback**: If `scikit-learn` or `lightgbm` are omitted in a lightweight container, the service automatically falls back to deterministic discrete-event simulation without downtime.
+
+---
+
+## 6. Running the Integration Tests
+
+To test and verify the trained model bundle end-to-end:
+
+```bash
+# Run comprehensive multi-scenario verification test
+python scripts/test_trained_model.py
+
+# Or specify a custom model path
+python scripts/test_trained_model.py --model "backend/model/depletion_model.pkl"
+
+# Run backend pytest suite
+pytest backend/tests/test_model_bundle.py backend/tests/test_p9_forecasting.py
+```
+
+---
+
+## 7. IBM LinuxONE & Zero-Exposure Fit
 
 1. **In-Process Micro-Execution**: Operates without external heavy ML runtimes or GPU drivers, ensuring instant compilation and flawless execution on **IBM LinuxONE (s390x)**.
 2. **Secure Execution Ready**: Can execute inside an IBM Secure Execution confidential KVM guest, guaranteeing that forecasting logic and regional hospital demand patterns remain encrypted in memory.
 3. **No External Network Leaks**: All inferences are deterministic, self-contained, and audited.
+

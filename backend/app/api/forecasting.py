@@ -155,6 +155,7 @@ def get_depletion_forecast(
             confidence_interval_hours=p.confidence_interval_hours,
             earliest_batch_expiry=p.earliest_batch_expiry,
             depletion_cause=p.depletion_cause,
+            model_source=getattr(p, "model_source", "Heuristic Simulation"),
         ).model_dump()
         for p in filtered
     ]
@@ -186,6 +187,8 @@ def get_forecasting_summary(
 
     dashboard = ForecastingDashboardOut(
         generated_at=now,
+        ml_model_loaded=_predictor.has_ml_model,
+        model_path=_predictor.model_path,
         total_inventory_items_monitored=len(predictions),
         critical_stockouts_count=critical_count,
         high_risk_stockouts_count=high_count,
@@ -223,8 +226,10 @@ def get_forecasting_summary(
                 confidence_interval_hours=p.confidence_interval_hours,
                 earliest_batch_expiry=p.earliest_batch_expiry,
                 depletion_cause=p.depletion_cause,
+                model_source=getattr(p, "model_source", "Heuristic Simulation"),
             )
             for p in predictions[:10]  # Top 10 most imminent stockouts
         ],
     )
     return envelope(dashboard.model_dump())
+
