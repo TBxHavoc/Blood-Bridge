@@ -39,7 +39,29 @@ async def lifespan(_: FastAPI):
         ensure_bootstrap_admin()
     except Exception:  # noqa: BLE001 - bootstrap is best-effort
         logger.exception("Bootstrap admin step failed; continuing startup.")
-    yield
+
+    # Start eRaktKosh 10-minute automated background scraper if enabled
+    if settings.eraktkosh_auto_sync_enabled:
+        from app.services.eraktkosh_scraper import (
+            start_eraktkosh_background_worker,
+            stop_eraktkosh_background_worker,
+        )
+
+        start_eraktkosh_background_worker(
+            interval_seconds=settings.eraktkosh_sync_interval_seconds
+        )
+        logger.info(
+            "eRaktKosh automated background scraper started (every %ds).",
+            settings.eraktkosh_sync_interval_seconds,
+        )
+
+    try:
+        yield
+    finally:
+        if settings.eraktkosh_auto_sync_enabled:
+            from app.services.eraktkosh_scraper import stop_eraktkosh_background_worker
+
+            await stop_eraktkosh_background_worker()
 
 
 def create_app() -> FastAPI:

@@ -33,3 +33,10 @@ def test_eraktkosh_bangalore_component_filter():
 def test_eraktkosh_unknown_blood_group():
     response = client.get("/api/v1/eraktkosh/bangalore/INVALID_BG")
     assert response.status_code == 404
+
+def test_eraktkosh_sync_now():
+    response = client.post("/api/v1/eraktkosh/sync-now")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert "summary" in data["data"]

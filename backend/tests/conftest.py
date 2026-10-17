@@ -22,6 +22,9 @@ TEST_PASSWORD = secrets.token_urlsafe(18)
 if not settings.seed_password:
     settings.seed_password = TEST_PASSWORD
 
+# Disable background automated scrapers during test runs
+settings.eraktkosh_auto_sync_enabled = False
+
 
 @pytest.fixture(scope="session")
 def db_ready() -> bool:

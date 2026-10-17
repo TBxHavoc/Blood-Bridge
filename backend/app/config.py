@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     match_score_threshold: int = 50
     max_eta_minutes: int = 180
 
+    # --- eRaktKosh live automated synchronization ---
+    eraktkosh_auto_sync_enabled: bool = True
+    eraktkosh_sync_interval_seconds: int = 600
+
     # --- Seed / bootstrap credentials ---
     # Never hardcode real credentials here: these are read from the environment
     # (a git-ignored backend/.env) and default to empty so nothing ships in the

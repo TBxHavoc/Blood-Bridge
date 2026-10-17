@@ -93,3 +93,19 @@ async def get_bangalore_blood_stock(
         return envelope(data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read blood group data: {e}")
+
+
+@router.post("/sync-now")
+async def trigger_eraktkosh_sync() -> dict[str, Any]:
+    """Triggers an immediate single-run scrape of eRaktKosh Bengaluru data."""
+    import asyncio
+    from app.services.eraktkosh_scraper import run_single_scrape
+
+    try:
+        summary = await asyncio.to_thread(run_single_scrape)
+        return envelope({
+            "message": "eRaktKosh Bengaluru blood stock scrape completed successfully.",
+            "summary": summary,
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Scrape execution failed: {e}")
