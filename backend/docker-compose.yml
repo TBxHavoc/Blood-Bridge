@@ -1,0 +1,35 @@
+# Blood Bridge — local stack. PostgreSQL + API.
+# Usage:  docker compose up -d
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: bloodbridge-db
+    environment:
+      POSTGRES_USER: bloodbridge
+      POSTGRES_PASSWORD: bloodbridge
+      POSTGRES_DB: bloodbridge
+    ports:
+      - "5432:5432"
+    volumes:
+      - bb_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bloodbridge -d bloodbridge"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    container_name: bloodbridge-api
+    environment:
+      DATABASE_URL: postgresql+psycopg://bloodbridge:bloodbridge@db:5432/bloodbridge
+      ENVIRONMENT: docker
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+volumes:
+  bb_pgdata:
