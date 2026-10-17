@@ -127,6 +127,7 @@ blood-bridge/
 ├── datasets/       # Synthetic CSVs and seed_data.py
 ├── deploy/         # Dockerfiles, docker-compose.yml, IBM setup guides
 ├── docs/           # All project documentation
+├── tools/          # Offline utilities (e.g. the eRaktKosh snapshot generator)
 └── .github/        # CI and deploy workflows
 ```
 
@@ -173,7 +174,7 @@ Measured results are recorded in [TESTING.md](docs/TESTING.md).
 - Matching is a recommendation only; humans execute decisions
 - Transport logistics are not modeled
 - Rule-based matching, not a trained ML model
-- **Future:** federated learning, advanced ML, integration with the national blood bank system (eRaktKosh), if permission is obtained
+- **Future:** federated learning, advanced ML, and a live integration with the national blood bank system (eRaktKosh) via the sanctioned ABDM/UHI `BloodStock` API. Today's eRaktKosh support is an offline snapshot of public aggregate figures only, not a live feed (see [DATA_SOURCES.md](docs/DATA_SOURCES.md) §2.1 and §2.3).
 
 See [LIMITATIONS.md](docs/LIMITATIONS.md) and [FUTURE_IMPROVEMENTS.md](docs/FUTURE_IMPROVEMENTS.md).
 

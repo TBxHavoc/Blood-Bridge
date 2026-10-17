@@ -2,7 +2,7 @@
 
 **Project:** Blood Bridge | IBM Z Datathon 2026 (AI Secured track)
 
-> ⚠️ **SIMULATED FOR DEMONSTRATION PURPOSES.** All data is synthetic.
+> ⚠️ **SIMULATED FOR DEMONSTRATION PURPOSES.** The demo dataset is synthetic. The one real input is an offline snapshot of eRaktKosh's public aggregate stock figures, which is not loaded into the demo (see [DATA_SOURCES.md](DATA_SOURCES.md) §2.1).
 
 Blood allocation is a life-or-death domain, so ethics is a design requirement rather than an add-on. This document covers bias and fairness, privacy ethics, transparency, accountability, and honesty.
 
@@ -50,6 +50,8 @@ See [PRIVACY_SECURITY.md](PRIVACY_SECURITY.md).
 ## 6. Honesty About the Data and the System
 
 - All data is synthetic and clearly labeled "SIMULATED FOR DEMONSTRATION PURPOSES"; it is never presented as real.
+- The eRaktKosh snapshot tool reads only public aggregate stock figures, runs offline and by hand, and stamps every output with a disclaimer that the counts are indicative and may be stale. Its output is never presented as a live feed.
+- The project's earlier blanket commitment not to scrape government systems has been superseded. The change, its reasons, and the limits now in place are recorded in [DATA_SOURCES.md](DATA_SOURCES.md) §2.3 rather than quietly dropped.
 - Reported metrics are measured on the demo dataset only, and the limits of the MVP are stated in [LIMITATIONS.md](LIMITATIONS.md).
 - IBM Z capabilities that are designed but not built are described as design.
 - Code review checks that no real personal information appears in any dataset.
