@@ -17,6 +17,7 @@ from app.schemas.request import RequestCreate
 from app.services.codes import next_code
 from app.services.matching_service import priority_ordered_query, run_matching
 from app.services.read import request_out
+from app.services.reservations import release_all_for_request
 
 router = APIRouter(prefix="/requests", tags=["requests"])
 match_router = APIRouter(prefix="/match", tags=["matching"])
@@ -147,6 +148,7 @@ def cancel_request(
     if row.status not in CANCELLABLE:
         raise bad_request(f"Cannot cancel a request in status {row.status}.")
     old_status = row.status
+    released = release_all_for_request(db, row)
     row.status = "CANCELLED"
     write_audit(
         db,
@@ -155,7 +157,7 @@ def cancel_request(
         resource_type="blood_request",
         resource_id=row.id,
         old_value={"status": old_status},
-        new_value={"status": "CANCELLED"},
+        new_value={"status": "CANCELLED", "released_reservations": released},
         ip_address=get_client_ip(request),
     )
     db.commit()
