@@ -71,14 +71,15 @@ class BloodDepletionPredictor:
         "depletion_model.pkl",
     ]
 
-    def __init__(self, decay_factor: float = 0.05, min_burn_rate: float = 0.1, model_path: Optional[str] = None):
+    def __init__(self, decay_factor: float = 0.05, min_burn_rate: float = 0.1, model_path: Optional[str] = None, use_ml_model: bool = True):
         self.decay_factor = decay_factor
         self.min_burn_rate = min_burn_rate
         self.ml_bundle: Optional[Dict[str, Any]] = None
         self.has_ml_model: bool = False
         self.model_path: Optional[str] = None
 
-        self._load_ml_model(model_path)
+        if use_ml_model and model_path != "disable":
+            self._load_ml_model(model_path)
 
     def _load_ml_model(self, custom_path: Optional[str] = None):
         """Attempts to load trained ML model bundle."""

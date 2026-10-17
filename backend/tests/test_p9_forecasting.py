@@ -85,7 +85,7 @@ def test_depletion_prediction_immediate_empty() -> None:
 
 
 def test_depletion_prediction_rate_and_risk_tiers() -> None:
-    predictor = BloodDepletionPredictor()
+    predictor = BloodDepletionPredictor(use_ml_model=False)
     now = datetime(2026, 10, 17, 12, 0, 0)
 
     # 48 units consumed over 2 days = 24 units/day (1 unit/hour)
@@ -134,7 +134,7 @@ def test_depletion_prediction_rate_and_risk_tiers() -> None:
 
 
 def test_depletion_due_to_expiry_attrition() -> None:
-    predictor = BloodDepletionPredictor()
+    predictor = BloodDepletionPredictor(use_ml_model=False)
     now = datetime(2026, 10, 17, 12, 0, 0)
 
     # Low demand: 1 unit per day (0.0417 u/hr)
