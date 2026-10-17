@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from app import __version__
 from app.api.deps import require_roles
-from app.config import settings
 from app.core.config_store import get_all
 from app.core.envelope import envelope, utcnow
 from app.database import get_db
@@ -25,7 +24,6 @@ def health() -> dict:
         {
             "status": "ok",
             "version": __version__,
-            "environment": settings.environment,
             "time": utcnow().isoformat(),
         }
     )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -9,6 +10,10 @@ import bcrypt
 import jwt
 
 from app.config import settings
+
+# In-process revocation list for logged-out tokens (single-worker MVP, same
+# trade-off as the rate limiter). Keyed by the JWT `jti` claim.
+_revoked_jtis: set[str] = set()
 
 
 def hash_password(password: str) -> str:
@@ -35,6 +40,7 @@ def create_access_token(
         "sub": subject,
         "role": role,
         "org": affiliated_org_id,
+        "jti": uuid.uuid4().hex,
         "exp": expire,
         "iat": datetime.now(UTC),
     }
@@ -43,3 +49,20 @@ def create_access_token(
 
 def decode_access_token(token: str) -> dict[str, Any]:
     return jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+
+
+def revoke_token(token: str) -> None:
+    """Add a token's jti to the in-process revocation list (best-effort)."""
+    try:
+        payload = decode_access_token(token)
+    except Exception:  # noqa: BLE001 - an invalid token is already unusable
+        return
+    jti = payload.get("jti")
+    if jti:
+        _revoked_jtis.add(jti)
+
+
+def is_token_revoked(payload: dict[str, Any]) -> bool:
+    jti = payload.get("jti")
+    return bool(jti) and jti in _revoked_jtis
+

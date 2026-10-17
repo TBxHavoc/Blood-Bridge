@@ -6,11 +6,12 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_client_ip, get_current_user, require_roles
+from app.api.deps import get_client_ip, require_roles
 from app.constants import REQUEST_STATUSES
 from app.core.audit import write_audit
 from app.core.envelope import envelope
 from app.core.errors import bad_request, forbidden, not_found
+from app.core.ratelimit import check_rate_limit
 from app.database import get_db
 from app.models import BloodRequest, Hospital, User, utcnow
 from app.schemas.request import RequestCreate
@@ -23,14 +24,23 @@ router = APIRouter(prefix="/requests", tags=["requests"])
 match_router = APIRouter(prefix="/match", tags=["matching"])
 
 hospital_only = require_roles("hospital_user")
+# PRD 8.3: requests are owned by hospitals; admins may act across all of them.
+hospital_or_admin = require_roles("hospital_user", "admin")
+# PRD 8.3: only oversight roles may read the cross-hospital priority queue.
+queue_roles = require_roles("admin", "auditor")
 
 CANCELLABLE = {"OPEN", "HELD", "CONFIRMED"}
 
+CREATE_REQUEST_LIMIT = 60
+CREATE_REQUEST_WINDOW_SECONDS = 60
+
 
 def _can_view(user: User, row: BloodRequest) -> bool:
+    if user.role == "admin":
+        return True
     if user.role == "hospital_user":
         return user.affiliated_org_id == row.hospital_id
-    return True
+    return False
 
 
 def _load_visible(user: User, request_id: str, db: Session) -> BloodRequest:
@@ -52,6 +62,10 @@ def create_request(
     hospital_id = user.affiliated_org_id
     if not hospital_id or db.get(Hospital, hospital_id) is None:
         raise bad_request("Your account is not linked to a hospital.")
+
+    check_rate_limit(
+        f"create_request:{user.id}", CREATE_REQUEST_LIMIT, CREATE_REQUEST_WINDOW_SECONDS
+    )
 
     row = BloodRequest(
         code=next_code(db, BloodRequest, "REQ_", 6),
@@ -85,7 +99,7 @@ def create_request(
 @router.get("")
 def list_requests(
     status: str | None = Query(default=None),
-    user: User = Depends(get_current_user),
+    user: User = Depends(hospital_or_admin),
     db: Session = Depends(get_db),
 ) -> dict:
     stmt = select(BloodRequest)
@@ -105,7 +119,7 @@ def list_requests(
 @router.get("/{request_id}")
 def get_request(
     request_id: str,
-    user: User = Depends(get_current_user),
+    user: User = Depends(hospital_or_admin),
     db: Session = Depends(get_db),
 ) -> dict:
     row = _load_visible(user, request_id, db)
@@ -116,12 +130,10 @@ def get_request(
 def rematch_request(
     request_id: str,
     request: Request,
-    user: User = Depends(get_current_user),
+    user: User = Depends(hospital_or_admin),
     db: Session = Depends(get_db),
 ) -> dict:
     row = _load_visible(user, request_id, db)
-    if user.role == "hospital_user" and not _can_view(user, row):
-        raise forbidden()
     if row.status not in {"OPEN", "HELD"}:
         raise bad_request(f"Cannot rematch a request in status {row.status}.")
     run_matching(db, row, persist=True)
@@ -141,7 +153,7 @@ def rematch_request(
 def cancel_request(
     request_id: str,
     request: Request,
-    user: User = Depends(get_current_user),
+    user: User = Depends(hospital_or_admin),
     db: Session = Depends(get_db),
 ) -> dict:
     row = _load_visible(user, request_id, db)
@@ -167,7 +179,7 @@ def cancel_request(
 @match_router.get("/queue")
 def match_queue(
     limit: int = Query(default=50, ge=1, le=200),
-    _: User = Depends(get_current_user),
+    _: User = Depends(queue_roles),
     db: Session = Depends(get_db),
 ) -> dict:
     """Open requests in priority order (urgency desc, then oldest first)."""
