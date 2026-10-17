@@ -18,6 +18,8 @@ from app.services import reservations as svc
 router = APIRouter(tags=["reservations"])
 
 hospital_or_admin = require_roles("hospital_user", "admin")
+# Releasing a hold frees units; auditors are read-only and must not mutate.
+release_roles = require_roles("hospital_user", "bloodbank_user", "admin")
 
 
 def _own_request(db: Session, user: User, request_id: str) -> BloodRequest:
@@ -102,7 +104,7 @@ def confirm_reservation(
 def release_reservation(
     reservation_id: str,
     request: Request,
-    user: User = Depends(get_current_user),
+    user: User = Depends(release_roles),
     db: Session = Depends(get_db),
 ) -> dict:
     reservation = _load_reservation(db, user, reservation_id)

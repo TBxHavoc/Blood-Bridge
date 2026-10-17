@@ -86,8 +86,14 @@ def test_inventory_list_requires_auth(client: TestClient, world: dict) -> None:
     assert client.get("/api/v1/inventory").status_code == 401
 
 
-def test_inventory_list_authenticated(client: TestClient, world: dict) -> None:
+def test_inventory_list_forbidden_for_hospital(client: TestClient, world: dict) -> None:
+    # PRD 8.3: hospitals must not see blood-bank inventory internals.
     resp = client.get("/api/v1/inventory", headers=auth_header(world["hospital_token"]))
+    assert resp.status_code == 403
+
+
+def test_inventory_list_authenticated(client: TestClient, world: dict) -> None:
+    resp = client.get("/api/v1/inventory", headers=auth_header(world["bank_token"]))
     assert resp.status_code == 200
     assert isinstance(resp.json()["data"], list)
 
@@ -125,10 +131,12 @@ def test_hospital_cannot_create_inventory(client: TestClient, world: dict) -> No
     assert resp.status_code == 403
 
 
-def test_match_queue_is_priority_ordered(client: TestClient, world: dict) -> None:
+def test_match_queue_is_priority_ordered(
+    client: TestClient, world: dict, admin_token: str
+) -> None:
     _new_request(client, world["hospital_token"], urgency=1)
     _new_request(client, world["hospital_token"], urgency=5)
-    resp = client.get("/api/v1/match/queue", headers=auth_header(world["hospital_token"]))
+    resp = client.get("/api/v1/match/queue", headers=auth_header(admin_token))
     assert resp.status_code == 200
     urgencies = [row["urgency"] for row in resp.json()["data"]]
     assert urgencies == sorted(urgencies, reverse=True)

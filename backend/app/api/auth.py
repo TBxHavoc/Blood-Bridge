@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_client_ip, get_current_user
+from app.api.deps import bearer_scheme, get_client_ip, get_current_user
 from app.config import settings
 from app.core.audit import write_audit
 from app.core.envelope import envelope, utcnow
 from app.core.errors import unauthorized
 from app.core.ratelimit import check_rate_limit
-from app.core.security import create_access_token, verify_password
+from app.core.security import create_access_token, revoke_token, verify_password
 from app.database import get_db
 from app.models import User
 from app.schemas.auth import LoginRequest, TokenResponse
@@ -74,9 +75,13 @@ def me(user: User = Depends(get_current_user)) -> dict:
 def logout(
     request: Request,
     user: User = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> dict:
-    # Stateless JWTs: the client discards the token. We still record the event.
+    # Stateless JWTs: the client discards the token and we also revoke its jti
+    # so it cannot be replayed. We record the event either way.
+    if credentials is not None and credentials.credentials:
+        revoke_token(credentials.credentials)
     write_audit(
         db,
         action_type="USER_LOGOUT",

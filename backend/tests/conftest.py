@@ -93,6 +93,16 @@ def hospital_token(client: TestClient) -> str:
     return resp.json()["data"]["access_token"]
 
 
+@pytest.fixture
+def auditor_token(client: TestClient) -> str:
+    _ensure_user("pytest_auditor", "auditor")
+    resp = client.post(
+        "/api/v1/auth/login", json={"username": "pytest_auditor", "password": TEST_PASSWORD}
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()["data"]["access_token"]
+
+
 def auth_header(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 

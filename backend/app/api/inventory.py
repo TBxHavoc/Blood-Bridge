@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_client_ip, get_current_user, require_roles
+from app.api.deps import get_client_ip, require_roles
 from app.core.audit import write_audit
 from app.core.envelope import envelope
 from app.core.errors import bad_request, forbidden, not_found
@@ -17,6 +17,7 @@ from app.services.codes import next_code
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
+# PRD 8.3: inventory is visible only to blood banks and admins.
 manager_only = require_roles("bloodbank_user", "admin")
 
 
@@ -26,10 +27,14 @@ def list_inventory(
     component_type: str | None = None,
     blood_bank_id: str | None = None,
     only_available: bool = True,
-    _: User = Depends(get_current_user),
+    user: User = Depends(manager_only),
     db: Session = Depends(get_db),
 ) -> dict:
     stmt = select(BloodInventory)
+    if user.role == "bloodbank_user":
+        if not user.affiliated_org_id:
+            raise forbidden("Your account is not linked to a blood bank.")
+        stmt = stmt.where(BloodInventory.blood_bank_id == user.affiliated_org_id)
     if blood_group:
         stmt = stmt.where(BloodInventory.blood_group == blood_group)
     if component_type:
@@ -45,12 +50,13 @@ def list_inventory(
 @router.get("/{inventory_id}")
 def get_inventory(
     inventory_id: str,
-    _: User = Depends(get_current_user),
+    user: User = Depends(manager_only),
     db: Session = Depends(get_db),
 ) -> dict:
     row = db.get(BloodInventory, inventory_id)
     if row is None:
         raise not_found("Inventory item not found.")
+    _assert_can_view(user, row)
     return envelope(InventoryOut.model_validate(row).model_dump())
 
 
@@ -64,6 +70,13 @@ def _resolve_bank_id(user: User, payload_bank_id: str | None, db: Session) -> st
     if db.get(BloodBank, payload_bank_id) is None:
         raise bad_request("Unknown blood_bank_id.")
     return payload_bank_id
+
+
+def _assert_can_view(user: User, row: BloodInventory) -> None:
+    if user.role == "admin":
+        return
+    if user.affiliated_org_id != row.blood_bank_id:
+        raise forbidden("You can only view inventory for your own blood bank.")
 
 
 def _assert_can_edit(user: User, row: BloodInventory) -> None:

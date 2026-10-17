@@ -10,8 +10,10 @@ import logging
 from typing import Any
 
 from fastapi import FastAPI, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.envelope import error_envelope
@@ -83,15 +85,38 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def _api_error(_: Request, exc: ApiError) -> JSONResponse:
         return JSONResponse(
             status_code=exc.status_code,
-            content=error_envelope(exc.code, exc.message, exc.details),
+            content=jsonable_encoder(error_envelope(exc.code, exc.message, exc.details)),
         )
 
     @app.exception_handler(RequestValidationError)
     async def _validation(_: Request, exc: RequestValidationError) -> JSONResponse:
+        # Never echo raw input back: pydantic errors can carry the submitted
+        # body (including password fields) in `input`, and a `ValueError` object
+        # in `ctx` that is not JSON serializable. Keep only safe, scalar fields.
+        details = [
+            {
+                "loc": [str(part) for part in err.get("loc", ())],
+                "msg": str(err.get("msg", "")),
+                "type": str(err.get("type", "")),
+            }
+            for err in exc.errors()
+        ]
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
+            content=jsonable_encoder(
+                error_envelope("VALIDATION_ERROR", "Invalid input.", details)
+            ),
+        )
+
+    @app.exception_handler(IntegrityError)
+    async def _integrity(_: Request, exc: IntegrityError) -> JSONResponse:
+        # A uniqueness/constraint violation (e.g. a rare concurrent code
+        # collision) is a conflict, not a server fault.
+        logger.warning("Integrity error: %s", exc.orig)
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
             content=error_envelope(
-                "VALIDATION_ERROR", "Invalid input.", exc.errors()
+                "CONFLICT", "The operation conflicts with existing data. Please retry."
             ),
         )
 

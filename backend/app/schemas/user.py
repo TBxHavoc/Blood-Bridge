@@ -29,6 +29,13 @@ class UserCreate(BaseModel):
     role: str
     affiliated_org_id: str | None = None
 
+    @field_validator("password")
+    @classmethod
+    def _password_strength(cls, value: str) -> str:
+        if not any(ch.isalpha() for ch in value) or not any(ch.isdigit() for ch in value):
+            raise ValueError("password must contain at least one letter and one digit")
+        return value
+
     @field_validator("role")
     @classmethod
     def _role_allowed(cls, value: str) -> str:

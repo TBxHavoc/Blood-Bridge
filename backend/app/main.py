@@ -34,6 +34,8 @@ async def lifespan(_: FastAPI):
 
 
 def create_app() -> FastAPI:
+    # Interactive docs and the OpenAPI schema are exposed in development only.
+    expose_docs = not settings.is_production
     app = FastAPI(
         title=settings.app_name,
         version=__version__,
@@ -41,8 +43,9 @@ def create_app() -> FastAPI:
             "Privacy-first emergency blood-supply coordination. No patient or "
             "donor identifiers are ever stored, logged or returned."
         ),
-        docs_url="/docs",
-        openapi_url="/openapi.json",
+        docs_url="/docs" if expose_docs else None,
+        redoc_url="/redoc" if expose_docs else None,
+        openapi_url="/openapi.json" if expose_docs else None,
         lifespan=lifespan,
     )
 
@@ -53,6 +56,21 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def _security_headers(request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault(
+            "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
+        )
+        if request.url.scheme == "https":
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
+        return response
 
     register_exception_handlers(app)
     app.include_router(api_router, prefix=settings.api_v1_prefix)
