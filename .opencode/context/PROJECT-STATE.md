@@ -22,6 +22,8 @@ Monorepo, two top-level packages:
   `models/db_models.py` (dual-compatible ORM), `scripts/` (verify_db,
   test_hold_transaction, audit_chain_verifier), `docs/` (design + LinuxONE guide),
   `docker-compose.yml` (postgres + pgadmin). No app, no notebooks.
+- `frontend/` — static HTML prototypes (`demo.html`, `demo overview.html`,
+  `hospital-home.html`, `design.md`). Merged from `origin/frontend`.
 
 `DATABASE_URL` is the single switch between PostgreSQL and Db2 on IBM Z — no code
 changes needed. Python 3.11 (`backend/`), 3.11+ (`database/` scripts).
@@ -54,6 +56,8 @@ changes needed. Python 3.11 (`backend/`), 3.11+ (`database/` scripts).
   `notebooks/`, `scripts/`), the stray `backend/model/` (singular), the stale
   `database/app/` tree and all duplicate ML assets. Consolidated the ML pipeline
   into `backend/`. `database/` reduced to DB-only. See `DECISIONS.md`.
+- Merged `origin/frontend` into `dev` (`30ceb11`) — added `frontend/` prototypes.
+  Root `.gitignore`/`README.md` preserved (frontend branch had deleted them).
 
 **In progress:**
 -

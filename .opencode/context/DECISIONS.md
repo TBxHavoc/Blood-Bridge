@@ -55,3 +55,19 @@ resolution to match; updated `backend/docs/ML_DEPLETION_MODEL.md`.
 which file was authoritative.
 
 **Rejected:** keeping the mirror list "for safety" — it re-enables silent drift.
+
+### 2026-10-18 — frontend merged into dev without trimming root files
+
+**Context:** `origin/frontend` branched from the initial commit `71a04d3` and its
+final commit removed all non-frontend files, deleting root `.gitignore` and
+`README.md`. Both are modified in `dev`, so `git merge origin/frontend` produced
+modify/delete conflicts.
+
+**Decision:** Merged `origin/frontend` into `dev`, resolving both conflicts by
+keeping dev's `.gitignore` and `README.md`. Only `frontend/` was added.
+
+**Why:** The frontend branch's trim was meant to keep *that* branch clean, not to
+delete files from the integration branch. `dev` owns the repo-root files.
+
+**Rejected:** accepting the deletions — would drop `.gitignore`/`README.md` from dev.
+
