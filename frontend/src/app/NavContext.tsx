@@ -8,6 +8,7 @@ export type ViewName =
   | "Find supplies"
   | "Request blood"
   | "Reports"
+  | "Live eRaktKosh"
   | "FAQ";
 
 export interface NavParams {
@@ -33,6 +34,7 @@ export const WORKSPACE_ITEMS: { view: ViewName; label: string }[] = [
   { view: "Overview", label: "Overview" },
   { view: "Inventory", label: "Inventory" },
   { view: "Find supplies", label: "Find supplies" },
+  { view: "Live eRaktKosh", label: "Live Bangalore Stock" },
   { view: "Request blood", label: "Request blood" },
   { view: "Reports", label: "Reports" },
 ];

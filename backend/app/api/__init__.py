@@ -9,6 +9,7 @@ from app.api import (
     alerts,
     audit,
     auth,
+    eraktkosh,
     forecasting,
     inventory,
     requests,
@@ -27,4 +28,5 @@ api_router.include_router(reservations.router)
 api_router.include_router(alerts.router)
 api_router.include_router(audit.router)
 api_router.include_router(forecasting.router)
+api_router.include_router(eraktkosh.router)
 

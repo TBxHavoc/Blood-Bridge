@@ -12,6 +12,7 @@ import {
   GridIcon,
   HelpIcon,
   LogoutIcon,
+  PulseIcon,
   SearchIcon,
   UserIcon,
 } from "./Icons";
@@ -20,6 +21,7 @@ const ICONS: Record<ViewName, (props: { className?: string }) => JSX.Element> = 
   Overview: GridIcon,
   Inventory: CubeIcon,
   "Find supplies": SearchIcon,
+  "Live eRaktKosh": PulseIcon,
   "Request blood": DropIcon,
   Reports: DocIcon,
   FAQ: HelpIcon,

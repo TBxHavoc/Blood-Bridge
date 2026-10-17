@@ -14,3 +14,11 @@ htmlcov/
 .venv/
 env/
 venv/
+
+# Scraped public data files (deliberately not committed to git)
+*.csv
+bangalore_*.json
+bangalore_*.csv
+data/
+tools/output/
+frontend/public/data/eraktkosh/

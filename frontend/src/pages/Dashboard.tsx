@@ -17,6 +17,7 @@ import { FindSupplies } from "./FindSupplies";
 import { RequestBlood } from "./RequestBlood";
 import { Reports } from "./Reports";
 import { Faq } from "./Faq";
+import { LiveERaktKosh } from "./LiveERaktKosh";
 
 export function Dashboard({ token, user }: PageProps) {
   const { logout } = useAuth();
@@ -47,6 +48,7 @@ export function Dashboard({ token, user }: PageProps) {
           {view === "Overview" ? <Overview token={token} user={user} /> : null}
           {view === "Inventory" ? <Inventory token={token} user={user} /> : null}
           {view === "Find supplies" ? <FindSupplies token={token} user={user} /> : null}
+          {view === "Live eRaktKosh" ? <LiveERaktKosh /> : null}
           {view === "Request blood" ? <RequestBlood token={token} user={user} /> : null}
           {view === "Reports" ? <Reports token={token} user={user} /> : null}
           {view === "FAQ" ? <Faq /> : null}
