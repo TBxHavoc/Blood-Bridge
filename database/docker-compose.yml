@@ -1,0 +1,64 @@
+# Blood Bridge — local stack. PostgreSQL + FastAPI API + pgAdmin.
+# Usage:  docker compose up -d
+
+services:
+  # =============================================================================
+  # PostgreSQL Database (Local Hackathon Fallback & Development Instance)
+  # Pre-loads the schema, views, and synthetic demonstration dataset automatically
+  # =============================================================================
+  db:
+    image: postgres:16-alpine
+    container_name: bloodbridge-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bloodbridge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bloodbridge}
+      POSTGRES_DB: ${POSTGRES_DB:-bloodbridge}
+    ports:
+      - "5432:5432"
+    volumes:
+      - bb_pgdata:/var/lib/postgresql/data
+      # Automated initialization scripts executed on initial startup
+      - ./sql/01_schema_postgresql.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./sql/03_seed_data.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+      - ./sql/04_queries_and_views.sql:/docker-entrypoint-initdb.d/03_views.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bloodbridge} -d ${POSTGRES_DB:-bloodbridge}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # =============================================================================
+  # FastAPI Backend Service
+  # =============================================================================
+  api:
+    build: .
+    container_name: bloodbridge-api
+    environment:
+      DATABASE_URL: postgresql+psycopg://bloodbridge:bloodbridge@db:5432/bloodbridge
+      ENVIRONMENT: docker
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+  # =============================================================================
+  # pgAdmin 4 - Web UI Database Administration Console (Port 5050)
+  # =============================================================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: bloodbridge-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@bloodbridge.sim}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-Admin2026!}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  bb_pgdata:
