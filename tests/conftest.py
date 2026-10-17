@@ -95,3 +95,86 @@ def hospital_token(client: TestClient) -> str:
 
 def auth_header(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def world(db_ready: bool, client: TestClient) -> dict:
+    """A committed test world: one bank with B+ RBC stock + linked users."""
+    from datetime import date, timedelta
+
+    from app.models import BloodBank, BloodInventory, Hospital, User
+
+    session = SessionLocal()
+    try:
+        bank = session.query(BloodBank).filter(BloodBank.code == "BB_TEST").first()
+        if bank is None:
+            bank = BloodBank(
+                code="BB_TEST",
+                name="Test Blood Bank",
+                city="Testville",
+                latitude=19.0,
+                longitude=72.0,
+                capacity_units=100,
+            )
+            session.add(bank)
+            session.flush()
+        hospital = session.query(Hospital).filter(Hospital.code == "H_TEST").first()
+        if hospital is None:
+            hospital = Hospital(
+                code="H_TEST",
+                name="Test Hospital",
+                city="Testville",
+                latitude=19.05,
+                longitude=72.05,
+                emergency_dept_capacity="large",
+            )
+            session.add(hospital)
+            session.flush()
+        inventory = session.query(BloodInventory).filter(BloodInventory.code == "INV_TEST").first()
+        if inventory is None:
+            inventory = BloodInventory(
+                code="INV_TEST",
+                blood_bank_id=bank.id,
+                blood_group="B+",
+                component_type="RBC",
+                units_available=10,
+                units_reserved=0,
+                collection_date=date.today() - timedelta(days=5),
+                expiry_date=date.today() + timedelta(days=10),
+                is_available=True,
+            )
+            session.add(inventory)
+        for username, role, org in (
+            ("pytest_hosp", "hospital_user", hospital.id),
+            ("pytest_bank", "bloodbank_user", bank.id),
+        ):
+            if session.query(User).filter(User.username == username).first() is None:
+                session.add(
+                    User(
+                        username=username,
+                        email=f"{username}@pytest.test",
+                        password_hash=hash_password(TEST_PASSWORD),
+                        role=role,
+                        affiliated_org_id=org,
+                    )
+                )
+        session.commit()
+        ids = {
+            "bank_id": bank.id,
+            "hospital_id": hospital.id,
+            "inventory_id": inventory.id,
+        }
+    finally:
+        session.close()
+
+    def _token(username: str) -> str:
+        resp = client.post(
+            "/api/v1/auth/login",
+            json={"username": username, "password": TEST_PASSWORD},
+        )
+        assert resp.status_code == 200, resp.text
+        return resp.json()["data"]["access_token"]
+
+    ids["hospital_token"] = _token("pytest_hosp")
+    ids["bank_token"] = _token("pytest_bank")
+    return ids
