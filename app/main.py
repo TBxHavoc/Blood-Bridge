@@ -7,6 +7,7 @@ Run locally:
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,9 +16,20 @@ from app import __version__
 from app.api import api_router
 from app.config import settings
 from app.core.errors import register_exception_handlers
+from app.database import Base, engine
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("bloodbridge")
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # create_all() is acceptable for the hackathon MVP (PRD section 8.7).
+    import app.models  # noqa: F401  (register tables on Base.metadata)
+
+    Base.metadata.create_all(bind=engine)
+    logger.info("Schema ensured (%d tables).", len(Base.metadata.tables))
+    yield
 
 
 def create_app() -> FastAPI:
@@ -30,6 +42,7 @@ def create_app() -> FastAPI:
         ),
         docs_url="/docs",
         openapi_url="/openapi.json",
+        lifespan=lifespan,
     )
 
     app.add_middleware(
