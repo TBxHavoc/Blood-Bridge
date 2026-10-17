@@ -16,9 +16,10 @@ from app import __version__
 from app.api import api_router
 from app.config import settings
 from app.core.errors import register_exception_handlers
+from app.core.logging import configure_logging
 from app.database import Base, engine
 
-logging.basicConfig(level=logging.INFO)
+configure_logging()
 logger = logging.getLogger("bloodbridge")
 
 

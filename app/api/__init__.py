@@ -4,7 +4,16 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api import admin, auth, inventory, requests, reservations, system
+from app.api import (
+    admin,
+    alerts,
+    audit,
+    auth,
+    inventory,
+    requests,
+    reservations,
+    system,
+)
 
 api_router = APIRouter()
 api_router.include_router(system.router)
@@ -14,3 +23,5 @@ api_router.include_router(inventory.router)
 api_router.include_router(requests.router)
 api_router.include_router(requests.match_router)
 api_router.include_router(reservations.router)
+api_router.include_router(alerts.router)
+api_router.include_router(audit.router)

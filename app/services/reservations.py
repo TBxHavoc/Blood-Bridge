@@ -16,7 +16,25 @@ from sqlalchemy.orm import Session
 from app.constants import RESERVATION_STATUSES
 from app.core.config_store import get_int
 from app.core.errors import bad_request, conflict, not_found
-from app.models import BloodInventory, BloodRequest, MatchingResult, Reservation, utcnow
+from app.models import (
+    Alert,
+    BloodInventory,
+    BloodRequest,
+    MatchingResult,
+    Reservation,
+    utcnow,
+)
+
+
+def _add_alert(db: Session, request: BloodRequest, alert_type: str, message: str) -> None:
+    db.add(
+        Alert(
+            request_id=request.id,
+            alert_type=alert_type,
+            message=message,
+            recipient_user_id=request.created_by_user_id,
+        )
+    )
 
 
 def _lock_inventory(db: Session, inventory_id: str) -> BloodInventory:
@@ -117,6 +135,12 @@ def confirm_reservation(db: Session, reservation: Reservation) -> Reservation:
 
     request = _lock_request(db, reservation.request_id)
     request.status = "CONFIRMED"
+    _add_alert(
+        db,
+        request,
+        "ALLOCATED",
+        f"Units allocated for request {request.code} ({reservation.quantity} unit(s)).",
+    )
     db.flush()
     return reservation
 
@@ -167,6 +191,12 @@ def expire_stale_reservations(db: Session, now=None) -> int:
         reservation.status = "EXPIRED"
         request = db.get(BloodRequest, reservation.request_id)
         if request is not None:
+            _add_alert(
+                db,
+                request,
+                "MATCH_EXPIRED",
+                f"A held match for request {request.code} expired and was released.",
+            )
             _open_if_no_holds(db, request)
     if rows:
         db.flush()
