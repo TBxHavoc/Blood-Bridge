@@ -22,8 +22,8 @@ Monorepo, two top-level packages:
   `models/db_models.py` (dual-compatible ORM), `scripts/` (verify_db,
   test_hold_transaction, audit_chain_verifier), `docs/` (design + LinuxONE guide),
   `docker-compose.yml` (postgres + pgadmin). No app, no notebooks.
-- `frontend/` — static HTML prototypes (`demo.html`, `demo overview.html`,
-  `hospital-home.html`, `design.md`). Merged from `origin/frontend`.
+- `frontend/` — static HTML prototypes (`login page.html`, `hospital-home.html`,
+  `design.md`). Merged from `origin/frontend`.
 
 `DATABASE_URL` is the single switch between PostgreSQL and Db2 on IBM Z — no code
 changes needed. Python 3.11 (`backend/`), 3.11+ (`database/` scripts).
