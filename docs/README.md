@@ -50,7 +50,7 @@ Blood Bridge is a secure AI coordination layer (not a replacement for government
 6. Humans confirm and fulfil the request.
 7. Every step is written to the audit log.
 
-See [ARCHITECTURE.md](docs/ARCHITECTURE.md) and [MATCHING_ALGORITHM.md](docs/MATCHING_ALGORITHM.md).
+See [ARCHITECTURE.md](ARCHITECTURE.md) and [MATCHING_ALGORITHM.md](MATCHING_ALGORITHM.md).
 
 ## 5. Privacy & Security
 
@@ -70,7 +70,7 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) and [MATCHING_ALGORITHM.md](docs/MAT
 - **Audit logs:** immutable, covering every sensitive action.
 - **API security:** CORS restrictions, rate limiting, input validation, versioned endpoints (`/api/v1/...`).
 
-Details: [PRIVACY_SECURITY.md](docs/PRIVACY_SECURITY.md)
+Details: [PRIVACY_SECURITY.md](PRIVACY_SECURITY.md)
 
 ## 6. IBM Z Integration
 
@@ -80,7 +80,7 @@ Details: [PRIVACY_SECURITY.md](docs/PRIVACY_SECURITY.md)
 | 2 (if time permits) | Test Db2 instance on IBM LinuxONE; key tables migrated and queried by the matching engine |
 | 3 (proof of concept) | Secure Execution design for the matching engine, with pseudocode and security benefits |
 
-Details: [IBM_Z_INTEGRATION.md](docs/IBM_Z_INTEGRATION.md)
+Details: [IBM_Z_INTEGRATION.md](IBM_Z_INTEGRATION.md)
 
 ## 7. Tech Stack
 
@@ -114,7 +114,7 @@ docker compose -f deploy/docker-compose.yml up --build
 python datasets/seed_data.py
 ```
 
-Full instructions: [SETUP.md](docs/SETUP.md)
+Full instructions: [SETUP.md](SETUP.md)
 
 ## 9. Project Structure
 
@@ -127,6 +127,7 @@ blood-bridge/
 ├── datasets/       # Synthetic CSVs and seed_data.py
 ├── deploy/         # Dockerfiles, docker-compose.yml, IBM setup guides
 ├── docs/           # All project documentation
+├── tools/          # Offline utilities (e.g. the eRaktKosh snapshot generator)
 └── .github/        # CI and deploy workflows
 ```
 
@@ -134,24 +135,24 @@ blood-bridge/
 
 | Doc | Purpose |
 |---|---|
-| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design and data flow |
-| [DATA_DICTIONARY.md](docs/DATA_DICTIONARY.md) | Tables and fields |
-| [DATA_SOURCES.md](docs/DATA_SOURCES.md) | Where data comes from, synthetic data disclosure |
-| [API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md) | Endpoints with examples |
-| [SETUP.md](docs/SETUP.md) | Dev environment setup |
-| [MATCHING_ALGORITHM.md](docs/MATCHING_ALGORITHM.md) | Algorithm and pseudocode |
-| [PRIVACY_SECURITY.md](docs/PRIVACY_SECURITY.md) | Security model |
-| [IBM_Z_INTEGRATION.md](docs/IBM_Z_INTEGRATION.md) | IBM Z design |
-| [TESTING.md](docs/TESTING.md) | Tests and results |
-| [DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) | Demo walkthrough |
-| [LIMITATIONS.md](docs/LIMITATIONS.md) | What we did not build |
-| [ETHICAL_CONSIDERATIONS.md](docs/ETHICAL_CONSIDERATIONS.md) | Bias, fairness, ethics |
-| [FUTURE_IMPROVEMENTS.md](docs/FUTURE_IMPROVEMENTS.md) | Roadmap |
-| [DEPLOYMENT.md](docs/DEPLOYMENT.md) | Docker, cloud, CI/CD |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | System design and data flow |
+| [DATA_DICTIONARY.md](DATA_DICTIONARY.md) | Tables and fields |
+| [DATA_SOURCES.md](DATA_SOURCES.md) | Where data comes from, synthetic data disclosure |
+| [API_DOCUMENTATION.md](API_DOCUMENTATION.md) | Endpoints with examples |
+| [SETUP.md](SETUP.md) | Dev environment setup |
+| [MATCHING_ALGORITHM.md](MATCHING_ALGORITHM.md) | Algorithm and pseudocode |
+| [PRIVACY_SECURITY.md](PRIVACY_SECURITY.md) | Security model |
+| [IBM_Z_INTEGRATION.md](IBM_Z_INTEGRATION.md) | IBM Z design |
+| [TESTING.md](TESTING.md) | Tests and results |
+| [DEMO_SCRIPT.md](DEMO_SCRIPT.md) | Demo walkthrough |
+| [LIMITATIONS.md](LIMITATIONS.md) | What we did not build |
+| [ETHICAL_CONSIDERATIONS.md](ETHICAL_CONSIDERATIONS.md) | Bias, fairness, ethics |
+| [FUTURE_IMPROVEMENTS.md](FUTURE_IMPROVEMENTS.md) | Roadmap |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | Docker, cloud, CI/CD |
 
 ## 11. Evaluation Targets
 
-Measured results are recorded in [TESTING.md](docs/TESTING.md).
+Measured results are recorded in [TESTING.md](TESTING.md).
 
 | Metric | Target | Baseline (manual) |
 |---|---|---|
@@ -173,9 +174,9 @@ Measured results are recorded in [TESTING.md](docs/TESTING.md).
 - Matching is a recommendation only; humans execute decisions
 - Transport logistics are not modeled
 - Rule-based matching, not a trained ML model
-- **Future:** federated learning, advanced ML, integration with the national blood bank system (eRaktKosh), if permission is obtained
+- **Future:** federated learning, advanced ML, and a live integration with the national blood bank system (eRaktKosh) via the sanctioned ABDM/UHI `BloodStock` API. Today's eRaktKosh support is an offline snapshot of public aggregate figures only, not a live feed (see [DATA_SOURCES.md](DATA_SOURCES.md) §2.1 and §2.3).
 
-See [LIMITATIONS.md](docs/LIMITATIONS.md) and [FUTURE_IMPROVEMENTS.md](docs/FUTURE_IMPROVEMENTS.md).
+See [LIMITATIONS.md](LIMITATIONS.md) and [FUTURE_IMPROVEMENTS.md](FUTURE_IMPROVEMENTS.md).
 
 ## 13. What Blood Bridge Is Not
 
@@ -202,4 +203,4 @@ Healthcare IT practices (HL7 FHIR, HIPAA privacy principles, HITRUST), WHO blood
 
 ## License
 
-See [LICENSE](LICENSE).
+See [LICENSE](../LICENSE).
