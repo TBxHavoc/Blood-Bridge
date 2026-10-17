@@ -43,16 +43,26 @@ docker compose up --build
 
 ## Layout
 
+The repository root contains a single folder, `backend/`, which holds
+everything below. Run all commands from inside `backend/`.
+
 ```
-app/
-  main.py          FastAPI app factory
-  config.py        Settings (env-driven, incl. DATABASE_URL switch)
-  database.py      Engine, session, declarative Base
-  core/            Response envelope, errors, security, audit, masking
-  api/             Routers (system, auth, requests, inventory, matching, ...)
-  matching/        Matching engine: eligibility, priority, scoring, shortage
-  seed/            Synthetic dataset generator + loader
-tests/             Unit + integration tests
+backend/
+  app/               FastAPI application
+    main.py          App factory
+    config.py        Settings (env-driven, incl. DATABASE_URL switch)
+    database.py      Engine, session, declarative Base
+    core/            Response envelope, errors, security, audit, masking
+    api/             Routers (system, auth, requests, inventory, matching, ...)
+    matching/        Matching engine: eligibility, priority, scoring, shortage
+    seed/            Synthetic dataset generator + loader
+  scripts/           Operational scripts (metrics report)
+  tests/             Unit + integration tests
+  datasets/          Generated CSV snapshots (synthetic)
+  Dockerfile         API image
+  docker-compose.yml Local PostgreSQL + API
+  requirements*.txt  Dependencies
+  pyproject.toml     Ruff + pytest + coverage config
 ```
 
 ## Privacy invariants
