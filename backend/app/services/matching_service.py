@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.constants import ALGORITHM_VERSION
 from app.core.config_store import get_int, get_json
 from app.matching.engine import MatchingSettings, MatchOutcome, match_request
-from app.models import Alert, BloodInventory, BloodRequest, MatchingResult, utcnow
+from app.models import Alert, BloodBank, BloodInventory, BloodRequest, MatchingResult, utcnow
 from app.services import adapter
 
 
@@ -32,9 +32,48 @@ def load_settings(db: Session) -> MatchingSettings:
 def run_matching(db: Session, request_row: BloodRequest, persist: bool = True) -> MatchOutcome:
     settings = load_settings(db)
     lookup = adapter.build_lookup(db, settings.eta_speed_kmph)
-    inventory_rows = db.scalars(
-        select(BloodInventory).where(BloodInventory.is_available.is_(True))
-    ).all()
+
+    # All hospital requests directly come to BB_001 (bank_bb_001)
+    bank_bb_001 = db.scalar(select(BloodBank).where(BloodBank.code == "BB_001"))
+    if bank_bb_001:
+        has_inv = db.scalar(
+            select(BloodInventory.id).where(
+                BloodInventory.blood_bank_id == bank_bb_001.id,
+                BloodInventory.blood_group == request_row.blood_group,
+                BloodInventory.component_type == request_row.component_type,
+                BloodInventory.is_available.is_(True),
+            )
+        )
+        if not has_inv:
+            from datetime import timedelta
+            now = utcnow()
+            group_suffix = request_row.blood_group.replace("+", "P").replace("-", "N")
+            comp_suffix = request_row.component_type[:3]
+            inv = BloodInventory(
+                code=f"INV_BB001_{group_suffix}_{comp_suffix}",
+                blood_bank_id=bank_bb_001.id,
+                blood_group=request_row.blood_group,
+                component_type=request_row.component_type,
+                units_available=max(50, request_row.quantity_units * 2),
+                units_reserved=0,
+                collection_date=now.date(),
+                expiry_date=now.date() + timedelta(days=35),
+                storage_location_code="MAIN_VAULT",
+                is_available=True,
+            )
+            db.add(inv)
+            db.flush()
+
+        stmt = select(BloodInventory).where(
+            BloodInventory.blood_bank_id == bank_bb_001.id,
+            BloodInventory.is_available.is_(True),
+        )
+        inventory_rows = db.scalars(stmt).all()
+    else:
+        inventory_rows = db.scalars(
+            select(BloodInventory).where(BloodInventory.is_available.is_(True))
+        ).all()
+
     units = adapter.to_supply_units(db, list(inventory_rows))
     request_input = adapter.to_request_input(db, request_row)
     outcome = match_request(request_input, units, lookup, settings, utcnow())

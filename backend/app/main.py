@@ -31,29 +31,35 @@ async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
     logger.info("Schema ensured (%d tables).", len(Base.metadata.tables))
 
-    # Guarantee the temporary admin login exists, sourced from the environment
+    # Guarantee the temporary admin and dedicated hospital logins exist, sourced from the environment
     # (git-ignored .env). Never let this block startup.
-    from app.seed.bootstrap import ensure_bootstrap_admin
+    from app.seed.bootstrap import ensure_bootstrap_admin, ensure_bootstrap_hospital
 
     try:
         ensure_bootstrap_admin()
+        ensure_bootstrap_hospital()
     except Exception:  # noqa: BLE001 - bootstrap is best-effort
-        logger.exception("Bootstrap admin step failed; continuing startup.")
+        logger.exception("Bootstrap accounts step failed; continuing startup.")
 
-    # Start eRaktKosh 10-minute automated background scraper if enabled
+    # Start eRaktKosh 10-minute automated background scraper if enabled and dependencies available
     if settings.eraktkosh_auto_sync_enabled:
-        from app.services.eraktkosh_scraper import (
-            start_eraktkosh_background_worker,
-            stop_eraktkosh_background_worker,
-        )
+        try:
+            from app.services.eraktkosh_scraper import (
+                start_eraktkosh_background_worker,
+                stop_eraktkosh_background_worker,
+            )
 
-        start_eraktkosh_background_worker(
-            interval_seconds=settings.eraktkosh_sync_interval_seconds
-        )
-        logger.info(
-            "eRaktKosh automated background scraper started (every %ds).",
-            settings.eraktkosh_sync_interval_seconds,
-        )
+            start_eraktkosh_background_worker(
+                interval_seconds=settings.eraktkosh_sync_interval_seconds
+            )
+            logger.info(
+                "eRaktKosh automated background scraper started (every %ds).",
+                settings.eraktkosh_sync_interval_seconds,
+            )
+        except Exception as exc:
+            logger.warning(
+                "eRaktKosh automated background scraper skipped (%s).", exc
+            )
 
     try:
         yield

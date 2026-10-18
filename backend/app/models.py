@@ -275,6 +275,42 @@ class Alert(Base):
     )
 
 
+class Delivery(Base):
+    """Tracks blood delivery from a blood bank to a hospital after request approval."""
+
+    __tablename__ = "deliveries"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    request_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("blood_requests.id"), nullable=False
+    )
+    blood_bank_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("blood_banks.id"), nullable=False
+    )
+    hospital_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("hospitals.id"), nullable=False
+    )
+    distance_km: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    eta_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="DISPATCHED")
+    dispatched_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('DISPATCHED', 'IN_TRANSIT', 'ARRIVING', 'DELIVERED')",
+            name="ck_delivery_status",
+        ),
+        Index("ix_delivery_request", "request_id"),
+        Index("ix_delivery_hospital", "hospital_id"),
+        Index("ix_delivery_status", "status"),
+    )
+
+
 class AuditLog(Base):
     """Append-only. The application writes rows inside the same transaction as the
     action it records; there is no UPDATE or DELETE path in the code."""

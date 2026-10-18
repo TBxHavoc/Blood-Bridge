@@ -189,7 +189,7 @@ export function Login() {
           <h2>Every unit, accounted for.</h2>
           <p>
             A centralized platform to manage blood stock, maintain records, and simplify
-            hospital blood bank operations.
+            blood bank operations.
           </p>
         </div>
       </section>
@@ -197,7 +197,7 @@ export function Login() {
       <main className="panel">
         <div className="box">
           <h1>Welcome back</h1>
-          <p className="sub">Sign in to manage your hospital's blood inventory.</p>
+          <p className="sub">Sign in to manage your blood bank's inventory.</p>
 
           <form onSubmit={onSubmit} noValidate>
             <div className="field">
@@ -242,7 +242,7 @@ export function Login() {
           </form>
 
           <p className="notice">
-            For authorized hospital staff only. Activity on this system may be logged.
+            For authorized blood bank staff only. Activity on this system may be logged.
           </p>
         </div>
       </main>

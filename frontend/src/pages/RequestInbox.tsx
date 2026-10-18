@@ -1,10 +1,10 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { api } from "../lib/api";
 import { relativeTime } from "../lib/blood";
 import { useAsync } from "../hooks/useAsync";
 import type { PageProps } from "../app/PageProps";
-import { SearchIcon } from "../components/Icons";
+import { CheckIcon, SearchIcon } from "../components/Icons";
 import type { BloodRequest } from "../lib/types";
 
 /** Map numeric urgency (1–5) to the three display tiers.
@@ -109,8 +109,12 @@ function getFallbackRequests(): BloodRequest[] {
       quantity_units: 8,
       urgency: 5,
       status: "OPEN",
+      shortage_type: null,
+      priority_score: 5.0,
+      required_by_timestamp: null,
       request_timestamp: new Date(now - 14 * 60 * 1000).toISOString(),
       created_by_user_id: "user-01",
+      matches: [],
     },
     {
       id: "req-emg-002",
@@ -121,8 +125,12 @@ function getFallbackRequests(): BloodRequest[] {
       quantity_units: 12,
       urgency: 4,
       status: "OPEN",
+      shortage_type: null,
+      priority_score: 4.0,
+      required_by_timestamp: null,
       request_timestamp: new Date(now - 32 * 60 * 1000).toISOString(),
       created_by_user_id: "user-02",
+      matches: [],
     },
     {
       id: "req-urg-001",
@@ -133,8 +141,12 @@ function getFallbackRequests(): BloodRequest[] {
       quantity_units: 6,
       urgency: 3,
       status: "OPEN",
+      shortage_type: null,
+      priority_score: 3.0,
+      required_by_timestamp: null,
       request_timestamp: new Date(now - 95 * 60 * 1000).toISOString(),
       created_by_user_id: "user-03",
+      matches: [],
     },
     {
       id: "req-urg-002",
@@ -145,8 +157,12 @@ function getFallbackRequests(): BloodRequest[] {
       quantity_units: 10,
       urgency: 3,
       status: "HELD",
+      shortage_type: null,
+      priority_score: 3.0,
+      required_by_timestamp: null,
       request_timestamp: new Date(now - 75 * 60 * 1000).toISOString(),
       created_by_user_id: "user-04",
+      matches: [],
     },
     {
       id: "req-rou-001",
@@ -157,8 +173,12 @@ function getFallbackRequests(): BloodRequest[] {
       quantity_units: 4,
       urgency: 2,
       status: "OPEN",
+      shortage_type: null,
+      priority_score: 2.0,
+      required_by_timestamp: null,
       request_timestamp: new Date(now - 180 * 60 * 1000).toISOString(),
       created_by_user_id: "user-05",
+      matches: [],
     },
     {
       id: "req-rou-002",
@@ -169,8 +189,12 @@ function getFallbackRequests(): BloodRequest[] {
       quantity_units: 15,
       urgency: 1,
       status: "CONFIRMED",
+      shortage_type: null,
+      priority_score: 1.0,
+      required_by_timestamp: null,
       request_timestamp: new Date(now - 240 * 60 * 1000).toISOString(),
       created_by_user_id: "user-06",
+      matches: [],
     },
     {
       id: "req-rou-003",
@@ -181,8 +205,12 @@ function getFallbackRequests(): BloodRequest[] {
       quantity_units: 5,
       urgency: 2,
       status: "OPEN",
+      shortage_type: null,
+      priority_score: 2.0,
+      required_by_timestamp: null,
       request_timestamp: new Date(now - 120 * 60 * 1000).toISOString(),
       created_by_user_id: "user-07",
+      matches: [],
     },
   ];
 }
@@ -191,6 +219,9 @@ export function RequestInbox({ token }: PageProps) {
   const [input, setInput] = useState("");
   const [filter, setFilter] = useState("");
   const [urgencyFilter, setUrgencyFilter] = useState<string>("ALL");
+  const [items, setItems] = useState<BloodRequest[]>([]);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [banner, setBanner] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const { data, loading } = useAsync(async () => {
     // Attempt to fetch requests from API (supports hospital_user / admin)
@@ -215,7 +246,48 @@ export function RequestInbox({ token }: PageProps) {
     return getFallbackRequests();
   }, [token]);
 
-  const requests: BloodRequest[] = useMemo(() => data ?? [], [data]);
+  useEffect(() => {
+    if (data) {
+      setItems(data);
+    }
+  }, [data]);
+
+  const requests: BloodRequest[] = items.length > 0 ? items : (data ?? []);
+
+  async function handleAccept(req: BloodRequest) {
+    if (acceptingId) return;
+    setAcceptingId(req.id);
+    setBanner(null);
+    try {
+      await api.acceptRequest(token, req.id);
+      setItems((prev) =>
+        prev.map((r) => (r.id === req.id ? { ...r, status: "CONFIRMED" } : r))
+      );
+      setBanner({
+        type: "success",
+        text: `Request ${req.code} (${req.blood_group}, ${req.quantity_units} units) has been approved and accepted! The requesting hospital was notified in their alerts.`,
+      });
+    } catch (err: unknown) {
+      console.error("Failed to accept request:", err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (errMsg.includes("not found")) {
+        setItems((prev) =>
+          prev.map((r) => (r.id === req.id ? { ...r, status: "CONFIRMED" } : r))
+        );
+        setBanner({
+          type: "success",
+          text: `Demo request ${req.code} marked as approved.`,
+        });
+      } else {
+        setBanner({
+          type: "error",
+          text: `Failed to accept request: ${errMsg}`,
+        });
+      }
+    } finally {
+      setAcceptingId(null);
+    }
+  }
 
   // Apply search query and urgency tab filter
   const filtered = useMemo(() => {
@@ -271,6 +343,47 @@ export function RequestInbox({ token }: PageProps) {
       <p className="lead">
         Incoming blood stocking requests from partner hospitals. Emergency cases are always displayed at the top.
       </p>
+
+      {banner && (
+        <div
+          className={`banner-notice ${banner.type === "success" ? "banner-success" : "banner-error"}`}
+          style={{
+            padding: "0.85rem 1.25rem",
+            borderRadius: "10px",
+            marginBottom: "1.25rem",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            background:
+              banner.type === "success"
+                ? "rgba(34, 197, 94, 0.12)"
+                : "rgba(239, 68, 68, 0.12)",
+            border: `1px solid ${
+              banner.type === "success"
+                ? "rgba(34, 197, 94, 0.35)"
+                : "rgba(239, 68, 68, 0.35)"
+            }`,
+            color: banner.type === "success" ? "#4ade80" : "#f87171",
+            fontWeight: 500,
+          }}
+        >
+          <span>{banner.type === "success" ? "✓ " : "⚠ "}{banner.text}</span>
+          <button
+            type="button"
+            onClick={() => setBanner(null)}
+            style={{
+              background: "none",
+              border: "none",
+              color: "inherit",
+              cursor: "pointer",
+              fontSize: "1.2rem",
+              lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Summary strip */}
       <div className="card strip">
@@ -396,6 +509,7 @@ export function RequestInbox({ token }: PageProps) {
                 <th>Blood units ordered & types</th>
                 <th>Status</th>
                 <th>Requested</th>
+                <th style={{ textAlign: "right" }}>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -403,6 +517,7 @@ export function RequestInbox({ token }: PageProps) {
                 const tier = urgencyTier(req.urgency);
                 const distance = pseudoDistanceKm(req.id);
                 const name = hospitalName(req);
+                const isAccepted = req.status === "CONFIRMED" || req.status === "FULFILLED";
 
                 return (
                   <tr key={req.id} className={`inbox-row ${urgencyClass(tier)}`}>
@@ -438,12 +553,31 @@ export function RequestInbox({ token }: PageProps) {
                     <td className="time-col">
                       <span>{relativeTime(req.request_timestamp)}</span>
                     </td>
+                    <td className="action-col" style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      {isAccepted ? (
+                        <span className="approved-indicator">
+                          <CheckIcon /> Approved
+                        </span>
+                      ) : req.status === "CANCELLED" || req.status === "EXPIRED" ? (
+                        <span className="status-dimmed">{req.status}</span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn-accept-action"
+                          disabled={acceptingId === req.id}
+                          onClick={() => void handleAccept(req)}
+                          title="Accept and approve this hospital blood request"
+                        >
+                          {acceptingId === req.id ? "Approving…" : "Accept"}
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
               {!sorted.length ? (
                 <tr>
-                  <td className="empty" colSpan={6}>
+                  <td className="empty" colSpan={7}>
                     {loading
                       ? "Loading hospital stocking requests…"
                       : filter || urgencyFilter !== "ALL"

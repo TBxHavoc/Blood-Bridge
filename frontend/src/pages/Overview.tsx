@@ -14,7 +14,7 @@ import { datelineFor, greetingFor, orgLabel } from "../lib/session";
 import { useAsync } from "../hooks/useAsync";
 import { useClock } from "../hooks/useClock";
 import type { PageProps } from "../app/PageProps";
-import type { Alert, BloodRequest, EraktkoshSummary, InventoryItem, Reservation } from "../lib/types";
+import type { Alert, BloodRequest, DeliveryTracking, EraktkoshSummary, InventoryItem, Reservation } from "../lib/types";
 import { AlertList, type AlertItem } from "../components/AlertList";
 import { BloodBox } from "../components/BloodBox";
 import { Legend } from "../components/Legend";
@@ -22,7 +22,13 @@ import { useNav } from "../app/NavContext";
 
 type OverviewData =
   | { kind: "bank"; items: InventoryItem[]; reservations: Reservation[] }
-  | { kind: "hospital"; requests: BloodRequest[] }
+  | {
+      kind: "hospital";
+      items: InventoryItem[];
+      requests: BloodRequest[];
+      apiAlerts: Alert[];
+      deliveries: DeliveryTracking[];
+    }
   | {
       kind: "network";
       summary: EraktkoshSummary;
@@ -46,6 +52,7 @@ function reservationClass(status: string): StatusClass {
 }
 
 function alertTitle(type: string): string {
+  if (type === "ALLOCATED") return "Request Accepted & Approved";
   return type
     .toLowerCase()
     .split("_")
@@ -68,8 +75,13 @@ export function Overview({ token, user }: PageProps) {
       return { kind: "bank", items, reservations };
     }
     if (isHospital) {
-      const requests = await api.requests(token);
-      return { kind: "hospital", requests };
+      const [items, requests, apiAlerts, deliveries] = await Promise.all([
+        api.inventory(token).catch(() => [] as InventoryItem[]),
+        api.requests(token).catch(() => [] as BloodRequest[]),
+        api.alerts(token, { limit: 50 }).catch(() => [] as Alert[]),
+        api.deliveries(token).catch(() => [] as DeliveryTracking[]),
+      ]);
+      return { kind: "hospital", items, requests, apiAlerts, deliveries };
     }
     const [summary, apiAlerts, requests, reservations] = await Promise.all([
       api.eraktkoshSummary(),
@@ -81,23 +93,27 @@ export function Overview({ token, user }: PageProps) {
   }, [token, user.role]);
 
   const stock =
-    data?.kind === "bank"
+    data?.kind === "bank" || data?.kind === "hospital"
       ? buildStockFromInventory(data.items)
       : data?.kind === "network"
         ? buildStockFromErakthosh(data.summary)
         : [];
 
-  const apiAlerts: Alert[] = data?.kind === "network" ? data.apiAlerts : [];
+  const apiAlerts: Alert[] =
+    data?.kind === "network" || data?.kind === "hospital" ? data.apiAlerts : [];
   const requests: BloodRequest[] =
     data?.kind === "hospital" ? data.requests : data?.kind === "network" ? data.requests : [];
   const reservations: Reservation[] =
     data?.kind === "bank" ? data.reservations : data?.kind === "network" ? data.reservations : [];
+  const deliveries: DeliveryTracking[] =
+    data?.kind === "hospital" ? data.deliveries : [];
+  const activeDeliveries = deliveries.filter((d) => d.phase !== "DELIVERED");
 
   const scopeLabel =
     isBank
       ? "Your blood bank · live inventory"
       : isHospital
-        ? "Your hospital · your requests"
+        ? "Partner blood bank (BB_001) · available stock"
         : "Live eRaktKosh stock";
 
   const alerts: AlertItem[] = [];
@@ -173,6 +189,54 @@ export function Overview({ token, user }: PageProps) {
               <BloodBox key={item.type} item={item} />
             ))}
           </div>
+
+          {isHospital && activeDeliveries.length > 0 && (
+            <div className="card" style={{ borderLeft: "4px solid var(--red)", marginBottom: "1.25rem" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", padding: "1rem 1.25rem 0" }}>
+                <h2 style={{ margin: 0, display: "flex", alignItems: "center", gap: "8px", fontSize: "1.05rem" }}>
+                  <span>🚑</span> Active Blood Deliveries ({activeDeliveries.length})
+                </h2>
+                <button
+                  type="button"
+                  className="btn-track-delivery"
+                  onClick={() => go("Delivery tracking")}
+                >
+                  Open Live Tracking →
+                </button>
+              </div>
+              <div className="body" style={{ padding: "0 1.25rem 1rem" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                  {activeDeliveries.map((d) => (
+                    <div
+                      key={d.id}
+                      style={{
+                        background: "#fbf9f9",
+                        border: "1px solid var(--line)",
+                        borderRadius: "6px",
+                        padding: "0.75rem 1rem",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                        <span style={{ fontWeight: 700, color: "var(--red)" }}>
+                          {d.blood_group} ({d.quantity_units} units) · {d.blood_bank_name}
+                        </span>
+                        <span style={{ fontSize: "0.8rem", color: "var(--muted)", fontWeight: 600 }}>
+                          {d.phase === "ARRIVING"
+                            ? "🏥 Arriving Now"
+                            : d.show_eta
+                            ? `ETA: ${Math.ceil(d.eta_remaining_minutes)} min (${d.distance_km} km)`
+                            : "Calculating ETA (~5 min)…"}
+                        </span>
+                      </div>
+                      <p style={{ margin: "2px 0 0 0", fontSize: "0.88rem", color: "var(--ink)", fontWeight: 500 }}>
+                        {d.message}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="card">
             <h2>Recent activity</h2>

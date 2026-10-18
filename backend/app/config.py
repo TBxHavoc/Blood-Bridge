@@ -71,6 +71,8 @@ class Settings(BaseSettings):
     seed_password: str = ""
     admin_username: str = ""
     admin_password: str = ""
+    hospital_username: str = "hospital_h_001"
+    hospital_password: str = "Hospital@123"
 
     # --- Dedicated demo accounts (2 hospitals, 2 blood banks) ---
     # Individual credentials so each organisation logs in with its own password

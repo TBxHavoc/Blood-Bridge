@@ -17,7 +17,7 @@ from app.services import reservations as svc
 
 router = APIRouter(tags=["reservations"])
 
-hospital_or_admin = require_roles("hospital_user", "admin")
+hospital_or_admin = require_roles("hospital_user", "admin", "bloodbank_user")
 # Releasing a hold frees units; auditors are read-only and must not mutate.
 release_roles = require_roles("hospital_user", "bloodbank_user", "admin")
 

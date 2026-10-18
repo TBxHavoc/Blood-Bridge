@@ -72,6 +72,12 @@ services:
       # The scraper writes its snapshots to /data/eraktkosh (the API reads the
       # same path); a named volume keeps them across restarts and rebuilds.
       - bb_scrape:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/api/v1/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     depends_on:
       db:
         condition: service_healthy
@@ -150,6 +156,11 @@ services:
 
 volumes:
   bb_pgdata:
-    name: bloodbridge_pgdata
+    name: ${COMPOSE_PROJECT_NAME:-bloodbridge}_pgdata
   bb_scrape:
-    name: bloodbridge_scrape
+    name: ${COMPOSE_PROJECT_NAME:-bloodbridge}_scrape
+
+networks:
+  default:
+    name: ${COMPOSE_PROJECT_NAME:-bloodbridge}_net
+

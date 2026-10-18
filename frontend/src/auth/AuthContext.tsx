@@ -80,6 +80,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Clear session if any API call returns 401 Unauthorized (e.g. revoked token)
+  useEffect(() => {
+    const onUnauthorized = () => {
+      writeStored(null);
+      setSession(null);
+    };
+    window.addEventListener("bb:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("bb:unauthorized", onUnauthorized);
+  }, []);
+
   const login = useCallback(async (username: string, password: string) => {
     const res = await api.login(username, password);
     const next = { token: res.access_token, user: res.user };

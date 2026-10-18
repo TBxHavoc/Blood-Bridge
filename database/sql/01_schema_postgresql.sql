@@ -212,7 +212,25 @@ CREATE TABLE location_distances (
 );
 
 -- -----------------------------------------------------------------------------
--- 11. AUDIT LOGS TABLE
+-- 11. DELIVERIES TABLE
+-- Live delivery and transit tracking from blood bank to hospital.
+-- -----------------------------------------------------------------------------
+CREATE TABLE deliveries (
+    id VARCHAR(36) PRIMARY KEY,
+    request_id VARCHAR(36) NOT NULL REFERENCES blood_requests(id) ON DELETE CASCADE,
+    blood_bank_id VARCHAR(36) NOT NULL REFERENCES blood_banks(id) ON DELETE CASCADE,
+    hospital_id VARCHAR(36) NOT NULL REFERENCES hospitals(id) ON DELETE CASCADE,
+    distance_km DECIMAL(6, 2) NOT NULL DEFAULT 0.0 CHECK (distance_km >= 0),
+    eta_minutes INTEGER NOT NULL DEFAULT 30 CHECK (eta_minutes >= 0),
+    status VARCHAR(20) NOT NULL DEFAULT 'DISPATCHED' CHECK (status IN ('DISPATCHED', 'IN_TRANSIT', 'ARRIVING', 'DELIVERED')),
+    dispatched_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    delivered_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+-- -----------------------------------------------------------------------------
+-- 12. AUDIT LOGS TABLE
 -- Immutable, append-only audit trail (PRD 6.6, FR-19, FR-20, NFR-10, NFR-P5).
 -- Stores who, what, resource, old/new value, IP (as text for Db2 compatibility).
 -- Stretch Goal / Feature: Cryptographic hash chaining (prev_hash -> current_hash).
@@ -291,3 +309,9 @@ CREATE INDEX idx_users_org ON users (affiliated_org_type, affiliated_org_id);
 CREATE INDEX idx_audit_timestamp ON audit_logs (timestamp DESC);
 CREATE INDEX idx_audit_resource ON audit_logs (resource_type, resource_id);
 CREATE INDEX idx_audit_seq ON audit_logs (sequence_number);
+
+-- Deliveries tracking indexes
+CREATE INDEX idx_deliveries_request ON deliveries (request_id);
+CREATE INDEX idx_deliveries_hospital ON deliveries (hospital_id);
+CREATE INDEX idx_deliveries_status ON deliveries (status);
+

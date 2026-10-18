@@ -22,3 +22,7 @@ bangalore_*.csv
 data/
 tools/output/
 frontend/public/data/eraktkosh/
+
+
+# SSH keys
+DATA4CE.pem

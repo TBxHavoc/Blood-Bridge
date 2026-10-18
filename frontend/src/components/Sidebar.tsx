@@ -6,6 +6,7 @@ import { roleLabel } from "../lib/session";
 import type { User } from "../lib/types";
 import { Bloodstream } from "./Bloodstream";
 import {
+  BellIcon,
   CubeIcon,
   DocIcon,
   DropIcon,
@@ -14,20 +15,21 @@ import {
   InboxIcon,
   LogoutIcon,
   PulseIcon,
-  SearchIcon,
+  TruckIcon,
   UserIcon,
 } from "./Icons";
 
 const ICONS: Record<ViewName, (props: { className?: string }) => JSX.Element> = {
   Overview: GridIcon,
   Inventory: CubeIcon,
-  "Find supplies": SearchIcon,
   "Request inbox": InboxIcon,
+  Alerts: BellIcon,
+  "Delivery tracking": TruckIcon,
   "Live eRaktKosh": PulseIcon,
   "Request blood": DropIcon,
   Reports: DocIcon,
   FAQ: HelpIcon,
-};
+};
 
 
 interface SidebarProps {

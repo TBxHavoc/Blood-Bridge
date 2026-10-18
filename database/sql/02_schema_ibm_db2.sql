@@ -213,7 +213,30 @@ CREATE TABLE location_distances (
 );
 
 -- -----------------------------------------------------------------------------
--- 11. AUDIT LOGS TABLE
+-- 11. DELIVERIES TABLE
+-- -----------------------------------------------------------------------------
+CREATE TABLE deliveries (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    request_id VARCHAR(36) NOT NULL,
+    blood_bank_id VARCHAR(36) NOT NULL,
+    hospital_id VARCHAR(36) NOT NULL,
+    distance_km DECIMAL(6, 2) DEFAULT 0.0 NOT NULL,
+    eta_minutes INTEGER DEFAULT 30 NOT NULL,
+    status VARCHAR(20) DEFAULT 'DISPATCHED' NOT NULL,
+    dispatched_at TIMESTAMP DEFAULT CURRENT TIMESTAMP NOT NULL,
+    delivered_at TIMESTAMP DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT TIMESTAMP NOT NULL,
+    CONSTRAINT fk_deliv_req FOREIGN KEY (request_id) REFERENCES blood_requests(id) ON DELETE CASCADE,
+    CONSTRAINT fk_deliv_bb FOREIGN KEY (blood_bank_id) REFERENCES blood_banks(id) ON DELETE CASCADE,
+    CONSTRAINT fk_deliv_hosp FOREIGN KEY (hospital_id) REFERENCES hospitals(id) ON DELETE CASCADE,
+    CONSTRAINT chk_deliv_dist CHECK (distance_km >= 0),
+    CONSTRAINT chk_deliv_eta CHECK (eta_minutes >= 0),
+    CONSTRAINT chk_deliv_stat CHECK (status IN ('DISPATCHED', 'IN_TRANSIT', 'ARRIVING', 'DELIVERED'))
+);
+
+-- -----------------------------------------------------------------------------
+-- 12. AUDIT LOGS TABLE
 -- Immutable append-only audit trail on IBM Z LinuxONE (Db2)
 -- -----------------------------------------------------------------------------
 CREATE TABLE audit_logs (
@@ -246,3 +269,7 @@ CREATE INDEX idx_mr_req_rnk ON matching_results (request_id, rank);
 CREATE INDEX idx_alt_pol ON alerts (recipient_role, recipient_org_id, is_read, created_at DESC);
 CREATE INDEX idx_loc_dist ON location_distances (hospital_id, blood_bank_id);
 CREATE INDEX idx_aud_seq ON audit_logs (sequence_number);
+CREATE INDEX idx_deliv_req ON deliveries (request_id);
+CREATE INDEX idx_deliv_hosp ON deliveries (hospital_id);
+CREATE INDEX idx_deliv_stat ON deliveries (status);
+

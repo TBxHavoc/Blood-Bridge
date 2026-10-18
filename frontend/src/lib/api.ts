@@ -12,6 +12,7 @@
 import type {
   Alert,
   BloodRequest,
+  DeliveryTracking,
   Depletion,
   EraktkoshSummary,
   EraktkoshSupply,
@@ -89,6 +90,9 @@ export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Prom
 
   if (!res.ok || (payload && payload.success === false)) {
     const error = payload?.error;
+    if (res.status === 401 && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("bb:unauthorized", { detail: error?.message }));
+    }
     throw new ApiError(
       error?.message || `Request failed (HTTP ${res.status}).`,
       error?.code || "HTTP_ERROR",
@@ -159,6 +163,8 @@ export const api = {
   ) => apiFetch<BloodRequest>("/requests", { method: "POST", token, body }),
   cancelRequest: (token: string, id: string) =>
     apiFetch<BloodRequest>(`/requests/${id}/cancel`, { method: "POST", token }),
+  acceptRequest: (token: string, id: string) =>
+    apiFetch<BloodRequest>(`/requests/${id}/accept`, { method: "POST", token }),
   matchQueue: (token: string, limit = 50) =>
     apiFetch<BloodRequest[]>(`/match/queue${qs({ limit })}`, { token }),
 
@@ -171,6 +177,14 @@ export const api = {
   /* ---- reservations ---- */
   reservations: (token: string) =>
     apiFetch<Reservation[]>("/reservations", { token }),
+
+  /* ---- delivery tracking ---- */
+  deliveries: (token: string, params?: { status?: string }) =>
+    apiFetch<DeliveryTracking[]>(`/delivery${qs(params)}`, { token }),
+  getDelivery: (token: string, id: string) =>
+    apiFetch<DeliveryTracking>(`/delivery/${id}`, { token }),
+  confirmDeliveryArrival: (token: string, id: string) =>
+    apiFetch<DeliveryTracking>(`/delivery/${id}/confirm-arrival`, { method: "POST", token }),
 
   /* ---- eRaktKosh live stock (public, no token required) ---- */
   eraktkoshSummary: () =>

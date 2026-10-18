@@ -17,7 +17,8 @@ from app.services.codes import next_code
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
-# PRD 8.3: inventory is visible only to blood banks and admins.
+# Inventory can be read by managers, admins, and hospitals (to see partner bank supplies).
+view_roles = require_roles("bloodbank_user", "admin", "hospital_user")
 manager_only = require_roles("bloodbank_user", "admin")
 
 
@@ -27,7 +28,7 @@ def list_inventory(
     component_type: str | None = None,
     blood_bank_id: str | None = None,
     only_available: bool = True,
-    user: User = Depends(manager_only),
+    user: User = Depends(view_roles),
     db: Session = Depends(get_db),
 ) -> dict:
     stmt = select(BloodInventory)
@@ -35,6 +36,11 @@ def list_inventory(
         if not user.affiliated_org_id:
             raise forbidden("Your account is not linked to a blood bank.")
         stmt = stmt.where(BloodInventory.blood_bank_id == user.affiliated_org_id)
+    elif user.role == "hospital_user":
+        # Connected partner blood bank: BB_001
+        target_bank = db.scalar(select(BloodBank).where(BloodBank.code == "BB_001"))
+        if target_bank:
+            stmt = stmt.where(BloodInventory.blood_bank_id == target_bank.id)
     if blood_group:
         stmt = stmt.where(BloodInventory.blood_group == blood_group)
     if component_type:

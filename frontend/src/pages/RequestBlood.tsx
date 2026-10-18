@@ -80,7 +80,7 @@ export function RequestBlood({ token, user }: PageProps) {
   const isAdmin = user.role === "admin";
   const isAuditor = user.role === "auditor";
   const isBank = user.role === "bloodbank_user";
-  const canListRequests = isHospital || isAdmin;
+  const canListRequests = isHospital || isAdmin || isBank;
 
   const { data, error, reload } = useAsync(async () => {
     const requests = canListRequests ? await api.requests(token) : [];
@@ -119,7 +119,11 @@ export function RequestBlood({ token, user }: PageProps) {
       setResult(created);
       reload();
     } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : "Could not submit the request.");
+      if (err instanceof ApiError && err.status === 401) {
+        setFormError("Your session expired or was revoked. Please sign in again.");
+      } else {
+        setFormError(err instanceof ApiError ? err.message : "Could not submit the request.");
+      }
     } finally {
       setBusy(false);
     }

@@ -156,6 +156,32 @@ export interface Reservation {
   updated_at: string;
 }
 
+export type DeliveryPhase = "DISPATCHED" | "IN_TRANSIT" | "ARRIVING" | "DELIVERED";
+
+export interface DeliveryTracking {
+  id: string;
+  request_id: string;
+  request_code: string | null;
+  blood_bank_id: string;
+  blood_bank_name: string;
+  hospital_id: string;
+  hospital_name: string;
+  blood_group: BloodGroup | null;
+  component_type: ComponentType | null;
+  quantity_units: number | null;
+  distance_km: number;
+  eta_total_minutes: number;
+  eta_remaining_minutes: number;
+  show_eta: boolean;
+  phase: DeliveryPhase;
+  status: string;
+  dispatched_at: string | null;
+  delivered_at: string | null;
+  created_at: string | null;
+  elapsed_minutes: number;
+  message: string;
+}
+
 export interface RequestCreate {
   blood_group: BloodGroup;
   component_type: ComponentType;

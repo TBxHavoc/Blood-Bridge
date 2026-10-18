@@ -122,27 +122,24 @@ export function Inventory({ token, user }: PageProps) {
   const isHospital = user.role === "hospital_user";
 
   const { data, error, loading, reload } = useAsync(async () => {
-    if (isBank) {
+    if (isBank || isHospital) {
       const items = await api.inventory(token);
       return { kind: "bank", items } as const;
-    }
-    if (isHospital) {
-      return { kind: "hospital" } as const;
     }
     const summary = await api.eraktkoshSummary();
     return { kind: "network", summary } as const;
   }, [token, user.role, isBank, isHospital]);
 
   /* -------------------------------- Blood bank: own DB inventory ---------- */
-  if (isBank) {
+  if (isBank || isHospital) {
     const items = (data as { kind: "bank"; items: InventoryItem[] } | null)?.items ?? [];
     const stock = buildStockFromInventory(items);
     const totalUnits = items.reduce((sum, item) => sum + item.units_available, 0);
-    const affiliated = user.affiliated_org_id ?? "your bank";
+    const affiliated = isHospital ? "Partner Blood Bank (BB_001)" : (user.affiliated_org_id ?? "your bank");
 
     return (
       <section id="inventory">
-        <h1>Inventory — your blood bank</h1>
+        <h1>{isHospital ? "Inventory — partner blood bank supplies" : "Inventory — your blood bank"}</h1>
         <p className="lead">
           Your blood bank's own stock (database), not the public eRaktKosh
           snapshot. Add stock below; changes are written to your bank's
@@ -179,7 +176,7 @@ export function Inventory({ token, user }: PageProps) {
           </div>
         </div>
 
-        <Legend source={`Blood bank ${affiliated} · own inventory`} />
+        <Legend source={isHospital ? "Partner blood bank (BB_001) · available stock" : `Blood bank ${affiliated} · own inventory`} />
 
         <div className="card tablecard">
           <div className="tablewrap">
@@ -207,9 +204,9 @@ export function Inventory({ token, user }: PageProps) {
                         type="button"
                         className="restock"
                         aria-label={`Restock ${item.type}`}
-                        onClick={() => go("Find supplies", { type: item.type })}
+                        onClick={() => go(isHospital ? "Request blood" : "Request inbox", { type: item.type })}
                       >
-                        Restock
+                        {isHospital ? "Request blood" : "Restock"}
                       </button>
                     </td>
                   </tr>
@@ -226,36 +223,12 @@ export function Inventory({ token, user }: PageProps) {
           </div>
         </div>
 
-        <AddStockForm token={token} onAdded={reload} />
+        {!isHospital ? <AddStockForm token={token} onAdded={reload} /> : null}
         {loading ? <p className="loading">Loading inventory…</p> : null}
       </section>
     );
   }
-  if (isHospital) {
-    return (
-      <section id="inventory">
-        <h1>Inventory — your hospital</h1>
-        <p className="lead">
-          Hospitals request blood; they do not hold inventory. Inventory is
-          owned and managed by blood banks, so there is no stock to display for
-          your hospital here.
-        </p>
-        <div className="notice">
-          <span>
-            <strong>No inventory for your hospital.</strong> Use{" "}
-            <button
-              type="button"
-              className="link"
-              onClick={() => go("Request blood")}
-            >
-              Request blood
-            </button>{" "}
-            to send a request to partner blood banks.
-          </span>
-        </div>
-      </section>
-    );
-  }
+
 
   /* --------------------------- Admin / auditor: live network stock -------- */
   const summary = (data as { kind: "network"; summary: EraktkoshSummary } | null)
@@ -332,7 +305,7 @@ export function Inventory({ token, user }: PageProps) {
                         type="button"
                         className="restock"
                         aria-label={`Find supplies for ${item.type}`}
-                        onClick={() => go("Find supplies", { type: item.type })}
+                        onClick={() => go("Live eRaktKosh", { type: item.type })}
                       >
                         View banks
                       </button>

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -13,7 +15,19 @@ from app.core.envelope import envelope
 from app.core.errors import bad_request, forbidden, not_found
 from app.core.ratelimit import check_rate_limit
 from app.database import get_db
-from app.models import BloodRequest, Hospital, User, utcnow
+from app.models import (
+    Alert,
+    BloodBank,
+    BloodInventory,
+    BloodRequest,
+    Delivery,
+    Hospital,
+    LocationDistance,
+    MatchingResult,
+    Reservation,
+    User,
+    utcnow,
+)
 from app.schemas.request import RequestCreate
 from app.services.codes import next_code
 from app.services.matching_service import priority_ordered_query, run_matching
@@ -24,10 +38,11 @@ router = APIRouter(prefix="/requests", tags=["requests"])
 match_router = APIRouter(prefix="/match", tags=["matching"])
 
 hospital_only = require_roles("hospital_user")
-# PRD 8.3: requests are owned by hospitals; admins may act across all of them.
-hospital_or_admin = require_roles("hospital_user", "admin")
-# PRD 8.3: only oversight roles may read the cross-hospital priority queue.
-queue_roles = require_roles("admin", "auditor")
+# Requests are owned by hospitals; admins and blood banks may act/view incoming requests.
+hospital_or_admin = require_roles("hospital_user", "admin", "bloodbank_user")
+# Priority queue readable by oversight roles and blood banks.
+queue_roles = require_roles("admin", "auditor", "bloodbank_user")
+bloodbank_or_admin = require_roles("bloodbank_user", "admin")
 
 CANCELLABLE = {"OPEN", "HELD", "CONFIRMED"}
 
@@ -36,7 +51,7 @@ CREATE_REQUEST_WINDOW_SECONDS = 60
 
 
 def _can_view(user: User, row: BloodRequest) -> bool:
-    if user.role == "admin":
+    if user.role in ("admin", "bloodbank_user"):
         return True
     if user.role == "hospital_user":
         return user.affiliated_org_id == row.hospital_id
@@ -174,6 +189,131 @@ def cancel_request(
     )
     db.commit()
     return envelope(request_out(db, row).model_dump())
+
+
+@router.post("/{request_id}/accept")
+def accept_request(
+    request_id: str,
+    request: Request,
+    user: User = Depends(bloodbank_or_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    row = db.get(BloodRequest, request_id)
+    if row is None:
+        raise not_found("Blood request not found.")
+    if row.status in ("CANCELLED", "EXPIRED"):
+        raise bad_request(f"Cannot accept request with status '{row.status}'.")
+
+    old_status = row.status
+    row.status = "CONFIRMED"
+
+    # Identify approving blood bank
+    bank = None
+    if user.affiliated_org_id:
+        bank = db.get(BloodBank, user.affiliated_org_id)
+    if bank is None:
+        bank = db.get(BloodBank, "BB_001") or db.scalars(select(BloodBank)).first()
+    bank_name = bank.name if bank else "Blood Bank"
+    bank_id = bank.id if bank else "BB_001"
+
+    # Confirm any active reservations or reserve stock at this bank
+    active_res = db.scalars(
+        select(Reservation).where(
+            Reservation.request_id == row.id,
+            Reservation.status == "ACTIVE",
+        )
+    ).all()
+    if active_res:
+        for res in active_res:
+            res.status = "CONFIRMED"
+    else:
+        inv = db.scalars(
+            select(BloodInventory).where(
+                BloodInventory.blood_bank_id == bank_id,
+                BloodInventory.blood_group == row.blood_group,
+                BloodInventory.component_type == row.component_type,
+            )
+        ).first()
+        if inv:
+            inv.units_reserved = (inv.units_reserved or 0) + row.quantity_units
+
+    # Gather hospital users to alert
+    recipient_ids: set[str] = set()
+    if row.created_by_user_id:
+        recipient_ids.add(row.created_by_user_id)
+    if row.hospital_id:
+        h_users = db.scalars(
+            select(User).where(User.affiliated_org_id == row.hospital_id)
+        ).all()
+        for u in h_users:
+            recipient_ids.add(u.id)
+    if not recipient_ids:
+        all_h = db.scalars(select(User).where(User.role == "hospital_user")).all()
+        for u in all_h:
+            recipient_ids.add(u.id)
+
+    # Dispatch alerts with type ALLOCATED (valid in ALERT_TYPES)
+    for recipient_id in recipient_ids:
+        db.add(
+            Alert(
+                request_id=row.id,
+                alert_type="ALLOCATED",
+                message=f"Request {row.code} ({row.blood_group} {row.component_type}, {row.quantity_units} units) has been approved by {bank_name}. Delivery partner is on the way!",
+                recipient_user_id=recipient_id,
+                is_read=False,
+            )
+        )
+
+    # Create delivery tracking record
+    distance_km = 0.0
+    eta_minutes = 30  # default
+
+    # Try to pull distance from matching results first
+    match_row = db.scalars(
+        select(MatchingResult).where(
+            MatchingResult.request_id == row.id,
+            MatchingResult.is_active.is_(True),
+        ).order_by(MatchingResult.ranking.asc())
+    ).first()
+    if match_row:
+        distance_km = match_row.distance_km
+        eta_minutes = match_row.eta_minutes
+    else:
+        # Fallback: compute haversine distance between bank and hospital
+        hospital = db.get(Hospital, row.hospital_id)
+        if bank and hospital:
+            lat1, lon1 = math.radians(float(bank.latitude)), math.radians(float(bank.longitude))
+            lat2, lon2 = math.radians(float(hospital.latitude)), math.radians(float(hospital.longitude))
+            dlat = lat2 - lat1
+            dlon = lon2 - lon1
+            a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+            distance_km = 6371 * 2 * math.asin(math.sqrt(a))
+            eta_minutes = max(5, math.ceil((distance_km / 30.0) * 60 + 5))
+
+    db.add(
+        Delivery(
+            request_id=row.id,
+            blood_bank_id=bank_id,
+            hospital_id=row.hospital_id,
+            distance_km=round(distance_km, 2),
+            eta_minutes=eta_minutes,
+            status="DISPATCHED",
+        )
+    )
+
+    write_audit(
+        db,
+        action_type="ACCEPT_REQUEST",
+        user_id=user.id,
+        resource_type="blood_request",
+        resource_id=row.id,
+        old_value={"status": old_status},
+        new_value={"status": "CONFIRMED", "accepted_by_bank": bank_name},
+        ip_address=get_client_ip(request),
+    )
+    db.commit()
+    return envelope(request_out(db, row).model_dump())
+
 
 
 @match_router.get("/queue")

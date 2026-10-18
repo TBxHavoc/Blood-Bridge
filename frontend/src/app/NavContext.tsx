@@ -5,9 +5,10 @@ import type { BloodGroup } from "../lib/types";
 export type ViewName =
   | "Overview"
   | "Inventory"
-  | "Find supplies"
   | "Request inbox"
   | "Request blood"
+  | "Alerts"
+  | "Delivery tracking"
   | "Reports"
   | "Live eRaktKosh"
   | "FAQ";
@@ -32,20 +33,22 @@ export function useNav(): NavValue {
 }
 
 export function getWorkspaceItems(role?: string): { view: ViewName; label: string }[] {
-  if (role === "bloodbank_user") {
+  if (role === "hospital_user") {
     return [
       { view: "Overview", label: "Overview" },
       { view: "Inventory", label: "Inventory" },
-      { view: "Request inbox", label: "Request inbox" },
-      { view: "Live eRaktKosh", label: "Live Bangalore Stock" },
       { view: "Request blood", label: "Request blood" },
+      { view: "Alerts", label: "Alerts" },
+      { view: "Delivery tracking", label: "Delivery tracking" },
       { view: "Reports", label: "Reports" },
     ];
   }
   return [
     { view: "Overview", label: "Overview" },
     { view: "Inventory", label: "Inventory" },
-    { view: "Find supplies", label: "Find supplies" },
+    { view: "Request inbox", label: "Request inbox" },
+    { view: "Alerts", label: "Alerts" },
+    { view: "Delivery tracking", label: "Delivery tracking" },
     { view: "Live eRaktKosh", label: "Live Bangalore Stock" },
     { view: "Request blood", label: "Request blood" },
     { view: "Reports", label: "Reports" },
@@ -55,7 +58,9 @@ export function getWorkspaceItems(role?: string): { view: ViewName; label: strin
 export const WORKSPACE_ITEMS: { view: ViewName; label: string }[] = [
   { view: "Overview", label: "Overview" },
   { view: "Inventory", label: "Inventory" },
-  { view: "Find supplies", label: "Find supplies" },
+  { view: "Request inbox", label: "Request inbox" },
+  { view: "Alerts", label: "Alerts" },
+  { view: "Delivery tracking", label: "Delivery tracking" },
   { view: "Live eRaktKosh", label: "Live Bangalore Stock" },
   { view: "Request blood", label: "Request blood" },
   { view: "Reports", label: "Reports" },
