@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { StockItem } from "../lib/derive";
-import { duration, levelPct, status } from "../lib/blood";
+import { availabilityOf, duration, levelPct, status } from "../lib/blood";
 import { ChevronDown } from "./Icons";
 import { ExpTag } from "./ExpTag";
 
@@ -11,9 +11,11 @@ export function BloodBox({ item }: { item: StockItem }) {
   const [open, setOpen] = useState(false);
   const fillRef = useRef<HTMLSpanElement>(null);
 
-  const [cls, label] = status(item.hours);
-  const pct = levelPct(item.hours);
-  const time = duration(item.hours);
+  const [cls, label] =
+    item.hours === null ? availabilityOf(item.units, true) : status(item.hours);
+  const pct =
+    item.hours === null ? Math.min(item.units / 300, 1) * 100 : levelPct(item.hours);
+  const time = item.hours === null ? "—" : duration(item.hours);
 
   useEffect(() => {
     const el = fillRef.current;

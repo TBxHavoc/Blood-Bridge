@@ -173,3 +173,58 @@ export interface InventoryCreate {
   expiry_date: string;
   storage_location_code?: string | null;
 }
+
+/* ---- eRaktKosh live stock (scraped from MoHFW / C-DAC) ---- */
+
+export interface EraktkoshGroupSummary {
+  key: string;
+  total_units: number;
+  unique_banks: number;
+  record_count: number;
+  file_json: string;
+  file_csv: string;
+}
+
+export interface EraktkoshSummary {
+  last_updated: string;
+  last_updated_iso: string;
+  total_records_scanned: number;
+  blood_groups: Record<string, EraktkoshGroupSummary>;
+}
+
+export interface EraktkoshBankRecord {
+  blood_bank_name: string;
+  category: string;
+  district: string;
+  component: string;
+  units: number;
+  phone: string;
+  email: string;
+  address: string;
+  last_updated: string;
+  type: string;
+  all_groups: Record<string, number>;
+}
+
+export interface EraktkoshBangalorePayload {
+  blood_group: string;
+  key: string;
+  city: string;
+  last_updated: string;
+  last_updated_iso: string;
+  total_units: number;
+  unique_banks: number;
+  record_count: number;
+  data: EraktkoshBankRecord[];
+}
+
+/* One row per real blood bank, as returned by GET /eraktkosh/supply. */
+export interface EraktkoshSupply {
+  name: string;
+  address: string;
+  phone: string;
+  email: string;
+  category: string;
+  all_groups: Record<string, number>;
+  last_updated: string;
+}

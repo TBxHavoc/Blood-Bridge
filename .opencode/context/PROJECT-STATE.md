@@ -32,6 +32,25 @@ Monorepo, two top-level packages:
 `DATABASE_URL` is the single switch between PostgreSQL and Db2 on IBM Z — no code
 changes needed. Python 3.11 (`backend/`), 3.11+ (`database/` scripts).
 
+Everything above ships as containers from the **root `docker-compose.yml`**
+(`db` + `api` + `web`, plus the opt-in `seed` and `tools`/pgAdmin profiles). The
+`web` container is nginx serving the built SPA and proxying `/api` → `api:8000`,
+so the browser only ever sees one origin. All configuration is the git-ignored
+root `.env` (template: the tracked `.env.example`); the same file targets a
+Linux / IBM LinuxONE host — only the values change, never the compose file or the
+images.
+
+The API also runs the eRaktKosh background scraper
+(`app/services/eraktkosh_scraper.py`, wired into `main.py`'s lifespan): it scrapes
+Bengaluru stock once shortly after startup and then every
+`ERAKTKOSH_SYNC_INTERVAL_SECONDS`, writing to `/data/eraktkosh` — a `bb_scrape`
+named volume, pre-created in the image because the path is hardcoded upstream.
+That same volume is mounted read-only into the `web` container at
+`/usr/share/nginx/html/data`, so nginx serves `/data/eraktkosh/*.json` straight
+off disk: the UI's static-first fetches see each new scrape in place, with no
+API round-trip and no rebuild. It needs `scrapling[fetchers]` (see
+`DECISIONS.md`).
+
 ## Scope boundaries
 
 **In scope:**
@@ -90,6 +109,49 @@ changes needed. Python 3.11 (`backend/`), 3.11+ (`database/` scripts).
   (`styles/login.css`): input borders flattened, and `.box`/`.notice` given
   explicit resets because the dashboard stylesheet leaks its alert-card and
   banner chrome into them — see `DECISIONS.md`.
+- Karnataka reference data: three district-wise hospital registries pulled from
+  data.gov.in into `backend/datasets/karnataka/` — private 1543, public district
+  33, public general 137 rows — via the new stdlib-only
+  `backend/scripts/fetch_karnataka_hospitals.py`. The key comes from
+  `DATAGOVIN_API_KEY` (blank placeholder added to `.env.example`); nothing is
+  hardcoded. Reference data only: **not** wired into the `hospitals` table, seed
+  or ML contract.
+- **Containerised locally** — root `docker-compose.yml`, verified running.
+  `db` (postgres:16-alpine, loopback-only 5432) + `api` (non-root `appuser`,
+  healthcheck on `/api/v1/health`) + `web` (nginx: SPA shell, SPA deep-link
+  fallback, and `/api` reverse proxy) all report **healthy**; login through the
+  proxy returns a JWT and the database holds the 11 tables plus the seeded rows.
+  Opt-in profiles: `seed` (`docker compose run --rm seed`, run with `--no-csv`)
+  and `tools` (pgAdmin). Retired the superseded `backend/docker-compose.yml`,
+  and dropped every explicit `container_name` so a sibling copy of this repo
+  (`D:\ibm hackathon`, project `ibmhackathon`) no longer collides on the global
+  name `bloodbridge-db`. See `DECISIONS.md`.
+- **Fixed the seed's two missing demo accounts.** `app/seed/seed.py` built the
+  `_admin`/`_auditor` `User` objects and counted them, but never passed them to
+  `db.add()`, so they were never inserted — 30 rows persisted while 32 were
+  reported, and `_admin` returned 401. They are now added in one `db.add_all`
+  plus `flush()`, and the reported `users` count is read back from the database
+  rather than trusting `len(users)`, so that class of divergence cannot hide
+  again. Verified in the container: 33 users (20 bank + 10 hospital + `_auditor`
+  + `_admin` + the bootstrap `admin`) and all five login paths authenticate. See
+  `DECISIONS.md`.
+- **Pulled + containerised the eRaktKosh feature** (`bfac9ce`, `51ca05c`): a
+  background scraper in the API, `GET /api/v1/eraktkosh/{summary,bangalore/{bg}}`,
+  `POST /api/v1/eraktkosh/sync-now`, and a "Live Bangalore Stock" page. The API
+  crashed on startup until `scrapling[fetchers]==0.5` was added to
+  `backend/requirements.txt`; the scraper also needed a writable
+  `/data/eraktkosh` plus a `bb_scrape` volume. Verified live: the worker fetched
+  906 component records, wrote all 8 blood groups (17 files), and
+  `GET /api/v1/eraktkosh/bangalore/O%2B` returns 273 records / 13708 units. See
+  `DECISIONS.md`.
+- **Made the scraped data actually show in the UI.** The Live page's static-first
+  fetches could never reach their API fallback (the parse error on nginx's
+  SPA-fallback `index.html` fired *inside* the `if (res.ok)` branch), and nothing
+  served `/data/eraktkosh/*.json` at all, so the blood-group table never had live
+  data. Fixed the fetch logic and mounted `bb_scrape` into the web container at
+  `/usr/share/nginx/html/data`. Verified: the static endpoint returns
+  `application/json`, and a forced scrape moved the served `last_updated_iso`
+  `23:46:25 → 23:51:28` with no rebuild.
 
 **In progress:**
 - Nothing actively mid-edit; frontend feature-complete pending review of visuals
@@ -115,6 +177,41 @@ changes needed. Python 3.11 (`backend/`), 3.11+ (`database/` scripts).
   warning and uses its simulation fallback (also produces the seeded predictions).
 - `backend/` pytest suite still not executed (deps only installed in a throwaway
   `.venv` for the smoke test); frontend has no test suite yet.
+- `database/sql/03_seed_data.sql` hardcodes bcrypt hashes for the demo password
+  `Demo2026!` (documented in `database/README.md`) and that standalone stack does
+  not read `SEED_PASSWORD`. The value is therefore intentional; only the
+  *example env files* were scrubbed. Regenerating those hashes is a DB-team call.
+- **`POST /api/v1/eraktkosh/sync-now` has no authentication.** Unlike every other
+  non-health endpoint it takes no `require_roles(...)` dependency, so anyone
+  reaching the API can force an outbound scrape. It is bound to loopback and only
+  proxied behind nginx, but it should still be admin-gated (or removed, since the
+  background worker already syncs on a timer). Raised, not changed — upstream's
+  route.
+- **The new root `.gitignore` ignores `*.csv` globally** ("Scraped public data
+  files (deliberately not committed)"), which silently covers
+  `backend/datasets/karnataka/*.csv` �?" the reference data added earlier can no
+  longer be staged without `-f`. Tracked CSVs are unaffected. Worth confirming
+  that blanket rule is intended.
+- **Switched Inventory, Find Supplies, and Overview off the seeded demo
+  depletion/inventory data onto live eRaktKosh scraped data.**
+  - Backend: added `GET /eraktkosh/supply` (aggregates all 8 group snapshots into
+    per-bank supply; verified 98 Bengaluru banks).
+  - Frontend: new public `eraktkoshSummary()` / `eraktkoshSupply()` api methods;
+    `buildStockFromErakthosh()` / `buildBankSupplyFromErakthosh()` derive adapters
+    (`StockItem.hours` is now `number | null` since scraped data has no burn-rate
+    or expiry); `BloodBox` renders null-hours as units-based availability.
+  - Verified: `/eraktkosh/summary` `last_updated_iso` advanced
+    `23:51:28 �+' 00:13:10` via the automatic 10-min cycle; `/eraktkosh/supply`
+    returns 98 banks; SPA 200; `tsc && vite build` clean.
+- **Per-org inventory: blood banks see their own DB stock, not eRaktKosh.**
+  - `Inventory.tsx` / `Overview.tsx` are now role-aware: `bloodbank_user` fetches
+    `api.inventory()` (server-scoped to `affiliated_org_id`) + `AddStockForm`;
+    `hospital_user` sees a "hospitals request, banks hold stock" message (no
+    inventory table exists for hospitals); `admin`/`auditor` see live eRaktKosh.
+  - Added 4 dedicated demo accounts with individual env-driven passwords
+    (`DEMO_HOSPITAL_1/2_PASSWORD`, `DEMO_BANK_1/2_PASSWORD`), affiliated to 2
+    hospitals + 2 blood banks; verified each blood bank logs in and sees only
+    its own inventory (bank_1 ≠ bank_2). `SEED_PASSWORD` still required for seed.
 
 ## Open questions
 

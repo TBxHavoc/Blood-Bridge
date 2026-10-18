@@ -15,6 +15,13 @@ router = APIRouter(prefix="/eraktkosh", tags=["eRaktKosh"])
 # Path to the scraped data folder
 DATA_DIR = Path(__file__).resolve().parent.parent.parent.parent / "data" / "eraktkosh"
 
+# Every eRaktKosh group snapshot the scraper writes. Reading all of them lets us
+# aggregate per-bank supply even for banks that only stock certain groups.
+GROUP_FILES = [
+    "A_positive", "A_negative", "B_positive", "B_negative",
+    "O_positive", "O_negative", "AB_positive", "AB_negative",
+]
+
 BLOOD_GROUP_KEY_MAP = {
     "A+": "A_positive",
     "A-": "A_negative",
@@ -93,6 +100,46 @@ async def get_bangalore_blood_stock(
         return envelope(data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read blood group data: {e}")
+
+
+@router.get("/supply")
+async def get_eraktkosh_supply() -> dict[str, Any]:
+    """Aggregate live scraped stock across all blood groups into per-bank supply.
+
+    Reads every eRaktKosh group snapshot and collapses it to one entry per blood
+    bank (deduplicated by name, using each bank's own `all_groups` breakdown), so
+    the UI can rank real Bengaluru blood banks by live units instead of the
+    seeded demo inventory.
+    """
+    banks: dict[str, dict[str, Any]] = {}
+    for fname in GROUP_FILES:
+        target_file = DATA_DIR / f"{fname}.json"
+        if not target_file.exists():
+            continue
+        try:
+            with open(target_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            continue
+        for rec in data.get("data", []):
+            name = rec.get("blood_bank_name")
+            if not name or name in banks:
+                continue
+            banks[name] = {
+                "name": name,
+                "address": rec.get("address") or "",
+                "phone": rec.get("phone") or "",
+                "email": rec.get("email") or "",
+                "category": rec.get("category") or "",
+                "all_groups": rec.get("all_groups") or {},
+                "last_updated": rec.get("last_updated") or "",
+            }
+    if not banks:
+        raise HTTPException(
+            status_code=404,
+            detail="No scraped eRaktKosh supply data found. Run the scraper first.",
+        )
+    return envelope(list(banks.values()))
 
 
 @router.post("/sync-now")

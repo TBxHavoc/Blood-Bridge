@@ -1,14 +1,20 @@
 import { useState, type FormEvent } from "react";
 
-import { api, ApiError } from "../lib/api";
-import { BLOOD_GROUPS, COMPONENT_TYPES, componentLabel, daysUntil, duration, status } from "../lib/blood";
-import { buildStock } from "../lib/derive";
+import { api } from "../lib/api";
+import { BLOOD_GROUPS, COMPONENT_TYPES, componentLabel } from "../lib/blood";
+import {
+  buildStockFromErakthosh,
+  buildStockFromInventory,
+} from "../lib/derive";
 import { useAsync } from "../hooks/useAsync";
 import type { PageProps } from "../app/PageProps";
 import { useNav } from "../app/NavContext";
-import { ExpTag } from "../components/ExpTag";
 import { Legend } from "../components/Legend";
-import type { BloodGroup, ComponentType } from "../lib/types";
+import type {
+  BloodGroup,
+  EraktkoshSummary,
+  InventoryItem,
+} from "../lib/types";
 
 function isoDate(offsetDays = 0): string {
   const d = new Date();
@@ -16,9 +22,11 @@ function isoDate(offsetDays = 0): string {
   return d.toISOString().slice(0, 10);
 }
 
+/* ---------------------------------------------------------------- Add stock */
+/* Blood banks write to their own inventory; never to the public snapshot. */
 function AddStockForm({ token, onAdded }: { token: string; onAdded: () => void }) {
   const [bloodGroup, setBloodGroup] = useState<BloodGroup>("O+");
-  const [component, setComponent] = useState<ComponentType>("RBC");
+  const [component, setComponent] = useState<"RBC" | "WHOLE_BLOOD">("RBC");
   const [units, setUnits] = useState(20);
   const [collection, setCollection] = useState(isoDate(0));
   const [expiry, setExpiry] = useState(isoDate(35));
@@ -44,7 +52,7 @@ function AddStockForm({ token, onAdded }: { token: string; onAdded: () => void }
     } catch (err) {
       setMessage({
         ok: false,
-        text: err instanceof ApiError ? err.message : "Could not add stock.",
+        text: err instanceof Error ? err.message : "Could not add stock.",
       });
     } finally {
       setBusy(false);
@@ -53,7 +61,7 @@ function AddStockForm({ token, onAdded }: { token: string; onAdded: () => void }
 
   return (
     <div className="card">
-      <h2>Add stock</h2>
+      <h2>Add stock — your blood bank</h2>
       <div className="body">
         {message ? (
           <div className={`notice${message.ok ? "" : " error"}`}>
@@ -68,32 +76,21 @@ function AddStockForm({ token, onAdded }: { token: string; onAdded: () => void }
             <label htmlFor="sGroup">Blood type</label>
             <select id="sGroup" value={bloodGroup} onChange={(e) => setBloodGroup(e.target.value as BloodGroup)}>
               {BLOOD_GROUPS.map((g) => (
-                <option key={g} value={g}>
-                  {g}
-                </option>
+                <option key={g} value={g}>{g}</option>
               ))}
             </select>
           </div>
           <div className="field">
             <label htmlFor="sComponent">Component</label>
-            <select id="sComponent" value={component} onChange={(e) => setComponent(e.target.value as ComponentType)}>
-              {COMPONENT_TYPES.map((c) => (
-                <option key={c} value={c}>
-                  {componentLabel(c)}
-                </option>
-              ))}
-            </select>
+          <select id="sComponent" value={component} onChange={(e) => setComponent(e.target.value as "RBC" | "WHOLE_BLOOD")}>
+            {COMPONENT_TYPES.map((c) => (
+              <option key={c} value={c}>{componentLabel(c)}</option>
+            ))}
+          </select>
           </div>
           <div className="field">
             <label htmlFor="sUnits">Units</label>
-            <input
-              id="sUnits"
-              type="number"
-              min={1}
-              step={1}
-              value={units}
-              onChange={(e) => setUnits(Number(e.target.value))}
-            />
+            <input id="sUnits" type="number" min={1} step={1} value={units} onChange={(e) => setUnits(Number(e.target.value))} />
           </div>
           <div className="field">
             <label htmlFor="sRack">Storage location (optional)</label>
@@ -121,38 +118,158 @@ function AddStockForm({ token, onAdded }: { token: string; onAdded: () => void }
 
 export function Inventory({ token, user }: PageProps) {
   const { go } = useNav();
-  const canManage = user.role === "bloodbank_user" || user.role === "admin";
-  const canAdd = user.role === "bloodbank_user";
-  const bankId = user.role === "bloodbank_user" ? user.affiliated_org_id ?? undefined : undefined;
+  const isBank = user.role === "bloodbank_user";
+  const isHospital = user.role === "hospital_user";
 
   const { data, error, loading, reload } = useAsync(async () => {
-    const [depletion, usage] = await Promise.all([api.depletion(token), api.usage(token)]);
-    const items = canManage ? await api.inventory(token) : [];
-    return { depletion, usage, items };
-  }, [token, canManage]);
+    if (isBank) {
+      const items = await api.inventory(token);
+      return { kind: "bank", items } as const;
+    }
+    if (isHospital) {
+      return { kind: "hospital" } as const;
+    }
+    const summary = await api.eraktkoshSummary();
+    return { kind: "network", summary } as const;
+  }, [token, user.role, isBank, isHospital]);
 
-  const stock = data ? buildStock(data.depletion, data.usage, { bankId }) : [];
-  const items = data?.items ?? [];
+  /* -------------------------------- Blood bank: own DB inventory ---------- */
+  if (isBank) {
+    const items = (data as { kind: "bank"; items: InventoryItem[] } | null)?.items ?? [];
+    const stock = buildStockFromInventory(items);
+    const totalUnits = items.reduce((sum, item) => sum + item.units_available, 0);
+    const affiliated = user.affiliated_org_id ?? "your bank";
 
-  const totalUnits = items.length
-    ? items.reduce((sum, item) => sum + item.units_available, 0)
-    : stock.reduce((sum, item) => sum + item.units, 0);
-  const weeklyUsage = Math.round(stock.reduce((sum, item) => sum + item.perDay * 7, 0));
-  const lowTypes = stock.filter((item) => item.hours < 72).length;
-  const expiringUnits = items.length
-    ? items.reduce((sum, item) => {
-        const days = daysUntil(item.expiry_date);
-        return days >= 0 && days <= 7 ? sum + item.units_available : sum;
-      }, 0)
-    : stock.reduce((sum, item) => sum + (item.expiring?.units ?? 0), 0);
+    return (
+      <section id="inventory">
+        <h1>Inventory — your blood bank</h1>
+        <p className="lead">
+          Your blood bank's own stock (database), not the public eRaktKosh
+          snapshot. Add stock below; changes are written to your bank's
+          inventory ({affiliated}).
+        </p>
+
+        {error ? (
+          <div className="notice error">
+            <span>
+              <strong>Could not load inventory</strong>
+              <small>{error}</small>
+            </span>
+          </div>
+        ) : null}
+
+        <div className="card strip">
+          <div className="cell">
+            <span className="lbl">Total units available</span>
+            <b className="val">{totalUnits.toLocaleString()}<small> units</small></b>
+          </div>
+          <div className="cell">
+            <span className="lbl">Blood groups tracked</span>
+            <b className="val">{stock.length}</b>
+          </div>
+          <div className="cell">
+            <span className="lbl">Low stock groups (&lt;100 units)</span>
+            <b className="val crit">{stock.filter((item) => item.units < 100).length}</b>
+          </div>
+          <div className="cell">
+            <span className="lbl">Expiring &le; 7 days</span>
+            <b className="val warn">
+              {stock.reduce((sum, item) => sum + (item.expiring?.units ?? 0), 0)}
+            </b>
+          </div>
+        </div>
+
+        <Legend source={`Blood bank ${affiliated} · own inventory`} />
+
+        <div className="card tablecard">
+          <div className="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Blood type</th>
+                  <th>Available units</th>
+                  <th>Reserved units</th>
+                  <th>Expiring ≤ 7 days</th>
+                  <th><span className="sr">Restock</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {stock.map((item) => (
+                  <tr key={item.type}>
+                    <td className="tcol">
+                      <div className="tc"><span>{item.type}</span></div>
+                    </td>
+                    <td>{item.units.toLocaleString()}</td>
+                    <td>{item.reserved.toLocaleString()}</td>
+                    <td>{item.expiring?.units ?? 0}</td>
+                    <td className="act">
+                      <button
+                        type="button"
+                        className="restock"
+                        aria-label={`Restock ${item.type}`}
+                        onClick={() => go("Find supplies", { type: item.type })}
+                      >
+                        Restock
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {!stock.length && !loading ? (
+                  <tr>
+                    <td className="empty" colSpan={5}>
+                      No inventory for your blood bank yet. Add stock below.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <AddStockForm token={token} onAdded={reload} />
+        {loading ? <p className="loading">Loading inventory…</p> : null}
+      </section>
+    );
+  }
+  if (isHospital) {
+    return (
+      <section id="inventory">
+        <h1>Inventory — your hospital</h1>
+        <p className="lead">
+          Hospitals request blood; they do not hold inventory. Inventory is
+          owned and managed by blood banks, so there is no stock to display for
+          your hospital here.
+        </p>
+        <div className="notice">
+          <span>
+            <strong>No inventory for your hospital.</strong> Use{" "}
+            <button
+              type="button"
+              className="link"
+              onClick={() => go("Request blood")}
+            >
+              Request blood
+            </button>{" "}
+            to send a request to partner blood banks.
+          </span>
+        </div>
+      </section>
+    );
+  }
+
+  /* --------------------------- Admin / auditor: live network stock -------- */
+  const summary = (data as { kind: "network"; summary: EraktkoshSummary } | null)
+    ?.summary;
+  const stock = summary ? buildStockFromErakthosh(summary) : [];
+  const totalUnits = stock.reduce((sum, item) => sum + item.units, 0);
 
   return (
     <section id="inventory">
-      <h1>Inventory</h1>
+      <h1>Inventory — live network stock</h1>
       <p className="lead">
-        {canManage
-          ? "Current stock, usage and restock options for every blood type."
-          : "Read-only network supply. Raw batch inventory is visible only to blood banks and admins."}
+        Live Bengaluru blood stock scraped from eRaktKosh (MoHFW / C-DAC),
+        refreshed every 10 minutes. Figures are indicative — call the blood
+        centre to confirm availability before dispatching emergency requests.
       </p>
 
       {error ? (
@@ -166,36 +283,26 @@ export function Inventory({ token, user }: PageProps) {
 
       <div className="card strip">
         <div className="cell">
-          <span className="lbl">Total units in inventory</span>
+          <span className="lbl">Total units in stock</span>
+          <b className="val">{totalUnits.toLocaleString()}<small> units</small></b>
+        </div>
+        <div className="cell">
+          <span className="lbl">Blood groups tracked</span>
+          <b className="val">{stock.length}</b>
+        </div>
+        <div className="cell">
+          <span className="lbl">Records scanned</span>
+          <b className="val">{summary?.total_records_scanned?.toLocaleString() ?? 0}</b>
+        </div>
+        <div className="cell">
+          <span className="lbl">Last scraped</span>
           <b className="val">
-            {totalUnits}
-            <small> units</small>
-          </b>
-        </div>
-        <div className="cell">
-          <span className="lbl">Weekly usage</span>
-          <b className="val">
-            {weeklyUsage}
-            <small> units</small>
-          </b>
-        </div>
-        <div className="cell">
-          <span className="lbl">Low stock types</span>
-          <b className="val crit">
-            {lowTypes}
-            <small> of {stock.length} types</small>
-          </b>
-        </div>
-        <div className="cell">
-          <span className="lbl">Expiring soon</span>
-          <b className="val warn">
-            {expiringUnits}
-            <small> units</small>
+            {summary?.last_updated_iso ? new Date(summary.last_updated_iso).toLocaleString() : "—"}
           </b>
         </div>
       </div>
 
-      <Legend source={bankId ? "Your blood bank" : "Network-wide"} />
+      <Legend source="Live eRaktKosh stock (no consumption forecast)" />
 
       <div className="card tablecard">
         <div className="tablewrap">
@@ -204,42 +311,30 @@ export function Inventory({ token, user }: PageProps) {
               <tr>
                 <th>Blood type</th>
                 <th>Total units</th>
-                <th>Average used per day</th>
-                <th>Estimated time before running out</th>
-                <th>
-                  <span className="sr">Restock</span>
-                </th>
+                <th>Unique banks</th>
+                <th>Records</th>
+                <th><span className="sr">Find supplies</span></th>
               </tr>
             </thead>
             <tbody>
               {stock.map((item) => {
-                const [cls, label] = status(item.hours);
+                const g = summary?.blood_groups[item.type];
                 return (
                   <tr key={item.type}>
                     <td className="tcol">
-                      <div className="tc">
-                        <span>{item.type}</span>
-                        {item.expiring ? <ExpTag expiring={item.expiring} /> : null}
-                      </div>
+                      <div className="tc"><span>{item.type}</span></div>
                     </td>
-                    <td>{item.units} units</td>
-                    <td>{Math.round(item.perDay * 10) / 10} units</td>
-                    <td>
-                      <span className={`time ${cls}`}>{duration(item.hours)}</span>
-                      <span className="st">{label}</span>
-                    </td>
+                    <td>{item.units.toLocaleString()} units</td>
+                    <td>{g?.unique_banks ?? 0}</td>
+                    <td>{g?.record_count ?? 0}</td>
                     <td className="act">
                       <button
                         type="button"
                         className="restock"
-                        aria-label={`Restock ${item.type}`}
-                        onClick={() =>
-                          go(user?.role === "bloodbank_user" ? "Request inbox" : "Find supplies", {
-                            type: item.type,
-                          })
-                        }
+                        aria-label={`Find supplies for ${item.type}`}
+                        onClick={() => go("Find supplies", { type: item.type })}
                       >
-                        Restock
+                        View banks
                       </button>
                     </td>
                   </tr>
@@ -248,7 +343,8 @@ export function Inventory({ token, user }: PageProps) {
               {!stock.length && !loading ? (
                 <tr>
                   <td className="empty" colSpan={5}>
-                    No inventory data available.
+                    No inventory data available. Run the eRaktKosh scraper to
+                    load live Bengaluru stock.
                   </td>
                 </tr>
               ) : null}
@@ -257,19 +353,7 @@ export function Inventory({ token, user }: PageProps) {
         </div>
       </div>
 
-      {loading ? <p className="loading">Loading inventory…</p> : null}
-
-      <div style={{ marginTop: 24 }}>
-        {canAdd ? (
-          <AddStockForm token={token} onAdded={reload} />
-        ) : (
-          <p className="hint">
-            {canManage
-              ? "Adding stock is available to blood-bank accounts (admin writes need an explicit blood_bank_id)."
-              : "Sign in as a blood-bank account to add or adjust stock."}
-          </p>
-        )}
-      </div>
+      {loading ? <p className="loading">Loading live inventory…</p> : null}
     </section>
   );
 }

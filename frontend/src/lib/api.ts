@@ -13,6 +13,8 @@ import type {
   Alert,
   BloodRequest,
   Depletion,
+  EraktkoshSummary,
+  EraktkoshSupply,
   ForecastSummary,
   InventoryCreate,
   InventoryItem,
@@ -169,4 +171,10 @@ export const api = {
   /* ---- reservations ---- */
   reservations: (token: string) =>
     apiFetch<Reservation[]>("/reservations", { token }),
+
+  /* ---- eRaktKosh live stock (public, no token required) ---- */
+  eraktkoshSummary: () =>
+    apiFetch<EraktkoshSummary>("/eraktkosh/summary"),
+  eraktkoshSupply: () =>
+    apiFetch<EraktkoshSupply[]>("/eraktkosh/supply"),
 };

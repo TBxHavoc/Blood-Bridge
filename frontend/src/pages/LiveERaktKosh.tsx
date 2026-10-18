@@ -57,6 +57,36 @@ const GROUP_KEY_MAP: Record<BloodGroup, string> = {
   "AB-": "AB_negative",
 };
 
+interface ApiEnvelope<T> {
+  success: boolean;
+  data: T;
+}
+
+// The scraper publishes each snapshot two ways: as static JSON under
+// /data/eraktkosh (the scrape volume, mounted into nginx) and through the API
+// at /api/v1/eraktkosh. Prefer the static file, fall back to the API.
+//
+// A missing static file is not an error: nginx's SPA fallback answers unknown
+// paths with index.html and a 200. A response therefore only counts if it is
+// actually JSON -- without that check we try to parse HTML, and because the
+// error was thrown inside the `if (res.ok)` branch the API fallback below it
+// was never reached, so the table could never load live data.
+async function fetchJson<T>(url: string): Promise<T | null> {
+  try {
+    const res = await fetch(`${url}?t=${Date.now()}`);
+    if (!res.ok) return null;
+    if (!(res.headers.get("content-type") ?? "").includes("json")) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchApiData<T>(url: string): Promise<T | null> {
+  const env = await fetchJson<ApiEnvelope<T>>(url);
+  return env?.data ?? null;
+}
+
 export function LiveERaktKosh() {
   const [selectedGroup, setSelectedGroup] = useState<BloodGroup>("O+");
   const [summary, setSummary] = useState<OverallSummary | null>(null);
@@ -69,64 +99,32 @@ export function LiveERaktKosh() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastCheckTime, setLastCheckTime] = useState<Date>(new Date());
 
-  // Fetch overall summary
+  // Fetch overall summary: static snapshot first, then the live API.
   const fetchSummary = useCallback(async () => {
-    try {
-      // Try local static json first (direct from public/data/eraktkosh)
-      const res = await fetch(`/data/eraktkosh/summary.json?t=${Date.now()}`);
-      if (res.ok) {
-        const data: OverallSummary = await res.json();
-        setSummary(data);
-        return data;
-      }
-    } catch {
-      // Fallback to backend API
-      try {
-        const apiRes = await fetch(`/api/v1/eraktkosh/summary?t=${Date.now()}`);
-        if (apiRes.ok) {
-          const env = await apiRes.json();
-          if (env.data) {
-            setSummary(env.data);
-            return env.data;
-          }
-        }
-      } catch {
-        // quiet fallback
-      }
+    const data =
+      (await fetchJson<OverallSummary>("/data/eraktkosh/summary.json")) ??
+      (await fetchApiData<OverallSummary>("/api/v1/eraktkosh/summary"));
+    if (data) {
+      setSummary(data);
+      return data;
     }
     return null;
   }, []);
 
-  // Fetch specific blood group data
+  // Fetch specific blood group data: static snapshot first, then the live API.
   const fetchGroupData = useCallback(async (bg: BloodGroup) => {
     const key = GROUP_KEY_MAP[bg];
     setLoading(true);
     setError(null);
-    try {
-      // Try static json directly from public
-      const res = await fetch(`/data/eraktkosh/${key}.json?t=${Date.now()}`);
-      if (res.ok) {
-        const data: BloodGroupPayload = await res.json();
-        setGroupData(data);
-        setLoading(false);
-        return;
-      }
-
-      // Fallback to backend API
-      const apiRes = await fetch(`/api/v1/eraktkosh/bangalore/${bg}?t=${Date.now()}`);
-      if (apiRes.ok) {
-        const env = await apiRes.json();
-        if (env.data) {
-          setGroupData(env.data);
-          setLoading(false);
-          return;
-        }
-      }
-      throw new Error(`Could not load data for blood group ${bg}`);
-    } catch (err) {
-      setError((err as Error).message || "Failed to load live data");
-      setLoading(false);
+    const data =
+      (await fetchJson<BloodGroupPayload>(`/data/eraktkosh/${key}.json`)) ??
+      (await fetchApiData<BloodGroupPayload>(`/api/v1/eraktkosh/bangalore/${encodeURIComponent(bg)}`));
+    if (data) {
+      setGroupData(data);
+    } else {
+      setError(`Could not load data for blood group ${bg}`);
     }
+    setLoading(false);
   }, []);
 
   // Initial load

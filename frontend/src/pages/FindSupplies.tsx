@@ -2,22 +2,29 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { api } from "../lib/api";
 import { availabilityOf, nameScore, parseQuery } from "../lib/blood";
-import { buildBankSupply, type BankSupply } from "../lib/derive";
+import { buildBankSupplyFromErakthosh, type BankSupply } from "../lib/derive";
 import { useAsync } from "../hooks/useAsync";
 import type { PageProps } from "../app/PageProps";
 import { useNav } from "../app/NavContext";
 import { ArrowRight, SearchIcon } from "../components/Icons";
 import type { BloodGroup } from "../lib/types";
 
-export function FindSupplies({ token }: PageProps) {
+export function FindSupplies({ token: _token }: PageProps) {
   const { go, params } = useNav();
   const [input, setInput] = useState("");
-  const [filter, setFilter] = useState<{ type: BloodGroup | ""; q: string }>({ type: "", q: "" });
+  const [filter, setFilter] = useState<{ type: BloodGroup | ""; q: string }>({
+    type: "",
+    q: "",
+  });
 
-  const { data, error, loading } = useAsync(async () => buildBankSupply(await api.depletion(token)), [token]);
+  const { data, error, loading } = useAsync(async () => {
+    const supply = await api.eraktkoshSupply();
+    return buildBankSupplyFromErakthosh(supply);
+  }, []);
+
   const banks: BankSupply[] = useMemo(() => data ?? [], [data]);
 
-  // Deep-link from the Inventory "Restock" button: go('Find supplies', { type })
+  // Deep-link from the Inventory "View banks" button: go('Find supplies', { type })
   useEffect(() => {
     if (params.type) {
       setInput(params.type);
@@ -72,7 +79,9 @@ export function FindSupplies({ token }: PageProps) {
     <section id="supplies">
       <h1>Find supplies</h1>
       <p className="lead">
-        See which partner blood banks hold a blood type. Ranked by units available.
+        See which partner blood banks hold a blood type. Ranked by units
+        available. Data is live from eRaktKosh (MoHFW / C-DAC), refreshed every
+        10 minutes.
       </p>
 
       <form className="search" role="search" onSubmit={onSubmit}>
@@ -119,6 +128,7 @@ export function FindSupplies({ token }: PageProps) {
                 <th>Blood bank</th>
                 <th>{unitsHead}</th>
                 <th>Availability</th>
+                <th>Location</th>
               </tr>
             </thead>
             <tbody>
@@ -140,16 +150,19 @@ export function FindSupplies({ token }: PageProps) {
                         <ArrowRight />
                       </button>
                     </td>
-                    <td>{bank.units} units</td>
+                    <td>{bank.units.toLocaleString()} units</td>
                     <td>
                       <span className={`time ${cls}`}>{label}</span>
+                    </td>
+                    <td style={{ fontSize: "0.8rem", color: "var(--muted)" }}>
+                      {bank.address.split(",").slice(0, 2).join(", ") || "—"}
                     </td>
                   </tr>
                 );
               })}
               {!list.length ? (
                 <tr>
-                  <td className="empty" colSpan={4}>
+                  <td className="empty" colSpan={5}>
                     {loading
                       ? "Loading blood banks…"
                       : type
@@ -163,7 +176,8 @@ export function FindSupplies({ token }: PageProps) {
         </div>
       </div>
       <p className="hint" style={{ padding: "10px 2px 0" }}>
-        Distances and ETAs are computed per request — submit a request to see ranked suppliers.
+        Distances and ETAs are computed per request — submit a request to see
+        ranked suppliers.
       </p>
     </section>
   );

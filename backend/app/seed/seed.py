@@ -16,7 +16,7 @@ import csv
 import random
 from pathlib import Path
 
-from sqlalchemy import delete
+from sqlalchemy import delete, func, select
 
 from app.config import settings
 from app.core.config_store import seed_defaults
@@ -129,6 +129,11 @@ def seed(
             User(username="_auditor", email="auditor@bloodbridge.test", password_hash=pwd,
                  role="auditor", affiliated_org_id=None),
         ]
+        # The two org-less demo accounts have no loop of their own, so add them
+        # here: without this they are counted by len(users) below but never
+        # reach the session, and never appear in the database.
+        db.add_all(users)
+        db.flush()
         hospital_user_by_code: dict[str, str] = {}
         for code, org_id in hospitals_by_code.items():
             user = User(
@@ -149,6 +154,36 @@ def seed(
                 password_hash=pwd,
                 role="bloodbank_user",
                 affiliated_org_id=org_id,
+            )
+            db.add(user)
+            users.append(user)
+        # --- Dedicated demo accounts: 2 hospitals + 2 blood banks, each with its
+        # own password, affiliated to a specific org so each sees only its own
+        # inventory in the UI (never the public eRaktKosh snapshot). ---
+        demo_accounts = [
+            (settings.demo_hospital_1_username, settings.demo_hospital_1_password),
+            (settings.demo_hospital_2_username, settings.demo_hospital_2_password),
+            (settings.demo_bank_1_username, settings.demo_bank_1_password),
+            (settings.demo_bank_2_username, settings.demo_bank_2_password),
+        ]
+        hospital_items = sorted(hospitals_by_code.items())
+        bank_items = sorted(banks_by_code.items())
+        demo_orgs = [
+            (hospital_items[0][1], "hospital_user") if len(hospital_items) > 0 else (None, None),
+            (hospital_items[1][1], "hospital_user") if len(hospital_items) > 1 else (None, None),
+            (bank_items[0][1], "bloodbank_user") if len(bank_items) > 0 else (None, None),
+            (bank_items[1][1], "bloodbank_user") if len(bank_items) > 1 else (None, None),
+        ]
+        for (username, password), (org_id, role) in zip(demo_accounts, demo_orgs):
+            if not username or not password or org_id is None:
+                continue
+            user = User(
+                username=username,
+                email=f"{username}@bloodbridge.test",
+                password_hash=hash_password(password),
+                role=role,
+                affiliated_org_id=org_id,
+                is_active=True,
             )
             db.add(user)
             users.append(user)
@@ -177,7 +212,9 @@ def seed(
         db.commit()
 
         counts = {
-            "users": len(users),
+            # Counted in the database, not from the in-memory list: the two are
+            # only equal if every constructed User was actually persisted.
+            "users": db.scalar(select(func.count()).select_from(User)),
             "blood_banks": len(bank_rows),
             "hospitals": len(hospital_rows),
             "blood_inventory": len(inventory_rows),

@@ -72,6 +72,19 @@ class Settings(BaseSettings):
     admin_username: str = ""
     admin_password: str = ""
 
+    # --- Dedicated demo accounts (2 hospitals, 2 blood banks) ---
+    # Individual credentials so each organisation logs in with its own password
+    # and sees only its own inventory. Left blank in the repo; set real values in
+    # the git-ignored backend/.env. Usernames default below but can be overridden.
+    demo_hospital_1_username: str = "demo_hospital_1"
+    demo_hospital_1_password: str = ""
+    demo_hospital_2_username: str = "demo_hospital_2"
+    demo_hospital_2_password: str = ""
+    demo_bank_1_username: str = "demo_bank_1"
+    demo_bank_1_password: str = ""
+    demo_bank_2_username: str = "demo_bank_2"
+    demo_bank_2_password: str = ""
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]

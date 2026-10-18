@@ -18,7 +18,7 @@ Matching is rule-based, explainable and fully audited.
 ## Quickstart (local)
 
 ```powershell
-# 1. Start PostgreSQL
+# 1. Start PostgreSQL (from the repo root, not backend/)
 docker compose up -d db
 
 # 2. Create venv + install deps
@@ -35,11 +35,9 @@ Copy-Item .env.example .env
 - API docs (Swagger): http://localhost:8000/docs
 - Health: http://localhost:8000/api/v1/health
 
-Or run the whole stack containerised:
-
-```powershell
-docker compose up --build
-```
+To run the whole stack (PostgreSQL + API + frontend) containerised, use the
+compose file at the repo root: `docker compose up -d --build` — see the
+[top-level README](../README.md).
 
 ## Layout
 
@@ -64,10 +62,10 @@ backend/
   docs/              ML_DEPLETION_MODEL.md
   scripts/           ML pipeline + operations
                      train_model.py, predict_depletion.py,
-                     evaluate_model_accuracy.py, test_trained_model.py, metrics.py
+                     evaluate_model_accuracy.py, test_trained_model.py, metrics.py,
+                     fetch_karnataka_hospitals.py
   tests/             Unit + integration tests
-  Dockerfile         API image
-  docker-compose.yml Local PostgreSQL + API
+  Dockerfile         API image (also built by the root docker-compose.yml)
   requirements*.txt  Dependencies
   pyproject.toml     Ruff + pytest + coverage config
 ```
@@ -86,6 +84,14 @@ python scripts/evaluate_model_accuracy.py
 
 # End-to-end model + service-layer integration test
 python scripts/test_trained_model.py
+```
+
+### Reference data
+
+```powershell
+# Refresh the Karnataka district-wise hospital registries from data.gov.in
+# (writes datasets/karnataka/*.csv). Needs DATAGOVIN_API_KEY -- see .env.example.
+python scripts/fetch_karnataka_hospitals.py
 ```
 
 ## Privacy invariants

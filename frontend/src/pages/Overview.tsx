@@ -1,15 +1,35 @@
 import { api } from "../lib/api";
-import { duration, status, type StatusClass } from "../lib/blood";
-import { buildStock } from "../lib/derive";
+import {
+  availabilityOf,
+  componentLabel,
+  relativeTime,
+  requestStatusClass,
+  type StatusClass,
+} from "../lib/blood";
+import {
+  buildStockFromErakthosh,
+  buildStockFromInventory,
+} from "../lib/derive";
 import { datelineFor, greetingFor, orgLabel } from "../lib/session";
-import { componentLabel, relativeTime, requestStatusClass } from "../lib/blood";
 import { useAsync } from "../hooks/useAsync";
 import { useClock } from "../hooks/useClock";
 import type { PageProps } from "../app/PageProps";
+import type { Alert, BloodRequest, EraktkoshSummary, InventoryItem, Reservation } from "../lib/types";
 import { AlertList, type AlertItem } from "../components/AlertList";
 import { BloodBox } from "../components/BloodBox";
 import { Legend } from "../components/Legend";
 import { useNav } from "../app/NavContext";
+
+type OverviewData =
+  | { kind: "bank"; items: InventoryItem[]; reservations: Reservation[] }
+  | { kind: "hospital"; requests: BloodRequest[] }
+  | {
+      kind: "network";
+      summary: EraktkoshSummary;
+      apiAlerts: Alert[];
+      requests: BloodRequest[];
+      reservations: Reservation[];
+    };
 
 const ALERT_LEVEL: Record<string, StatusClass> = {
   SHORTAGE_DETECTED: "crit",
@@ -36,51 +56,75 @@ function alertTitle(type: string): string {
 export function Overview({ token, user }: PageProps) {
   const now = useClock();
   const { go } = useNav();
-  const canSeeRequests = user.role === "hospital_user" || user.role === "admin";
-  const bankId = user.role === "bloodbank_user" ? user.affiliated_org_id ?? undefined : undefined;
+  const isBank = user.role === "bloodbank_user";
+  const isHospital = user.role === "hospital_user";
 
-  const { data, error, loading } = useAsync(async () => {
-    const [depletion, usage, alerts] = await Promise.all([
-      api.depletion(token),
-      api.usage(token),
+  const { data, error, loading } = useAsync(async (): Promise<OverviewData> => {
+    if (isBank) {
+      const [items, reservations] = await Promise.all([
+        api.inventory(token),
+        api.reservations(token),
+      ]);
+      return { kind: "bank", items, reservations };
+    }
+    if (isHospital) {
+      const requests = await api.requests(token);
+      return { kind: "hospital", requests };
+    }
+    const [summary, apiAlerts, requests, reservations] = await Promise.all([
+      api.eraktkoshSummary(),
       api.alerts(token, { limit: 50 }),
+      api.requests(token),
+      api.reservations(token),
     ]);
-    const requests = canSeeRequests ? await api.requests(token) : [];
-    const reservations = user.role === "bloodbank_user" ? await api.reservations(token) : [];
-    return { depletion, usage, alerts, requests, reservations };
-  }, [token, canSeeRequests, user.role]);
+    return { kind: "network", summary, apiAlerts, requests, reservations };
+  }, [token, user.role]);
 
-  const stock = data ? buildStock(data.depletion, data.usage, { bankId }) : [];
-  const scopeLabel = bankId ? "Your blood bank" : "Network-wide";
+  const stock =
+    data?.kind === "bank"
+      ? buildStockFromInventory(data.items)
+      : data?.kind === "network"
+        ? buildStockFromErakthosh(data.summary)
+        : [];
+
+  const apiAlerts: Alert[] = data?.kind === "network" ? data.apiAlerts : [];
+  const requests: BloodRequest[] =
+    data?.kind === "hospital" ? data.requests : data?.kind === "network" ? data.requests : [];
+  const reservations: Reservation[] =
+    data?.kind === "bank" ? data.reservations : data?.kind === "network" ? data.reservations : [];
+
+  const scopeLabel =
+    isBank
+      ? "Your blood bank · live inventory"
+      : isHospital
+        ? "Your hospital · your requests"
+        : "Live eRaktKosh stock";
 
   const alerts: AlertItem[] = [];
   for (const item of stock) {
-    if (item.hours < 72) {
-      const [cls] = status(item.hours);
+    const [cls] = availabilityOf(item.units, true);
+    if (cls === "low") {
       alerts.push({
-        cls,
-        title: `${item.type} is ${cls === "crit" ? "critically low" : "running low"}`,
-        note: `${item.units} units left, about ${duration(item.hours)} remaining`,
+        cls: "crit",
+        title: `${item.type} is critically low`,
+        note: `${item.units} units left.`,
+      });
+    } else if (cls === "warn") {
+      alerts.push({
+        cls: "warn",
+        title: `${item.type} running low`,
+        note: `${item.units} units left.`,
       });
     }
   }
-  for (const item of stock) {
-    if (item.expiring) {
-      alerts.push({
-        cls: item.expiring.days <= 2 ? "low" : "warn",
-        title: `${item.expiring.units} units of ${item.type} expiring soon`,
-        note: `Expire in ${item.expiring.days} day(s). Use or transfer them.`,
-      });
-    }
-  }
-  for (const alert of data?.alerts ?? []) {
+  for (const alert of apiAlerts) {
     alerts.push({
       cls: ALERT_LEVEL[alert.alert_type] ?? "warn",
       title: alertTitle(alert.alert_type),
       note: alert.message,
     });
   }
-  const pending = (data?.requests ?? []).filter(
+  const pending = requests.filter(
     (r) => r.status === "OPEN" || r.status === "HELD",
   ).length;
   if (pending > 0) {
@@ -91,12 +135,12 @@ export function Overview({ token, user }: PageProps) {
     });
   }
 
-  const activity = (data?.requests ?? []).slice(0, 5).map((r) => ({
+  const activity = requests.slice(0, 5).map((r) => ({
     cls: requestStatusClass(r.status),
     title: `${r.quantity_units} units of ${r.blood_group} · ${r.status.toLowerCase()}`,
     note: `${componentLabel(r.component_type)} · ${relativeTime(r.request_timestamp)}`,
   }));
-  const reservationActivity = (data?.reservations ?? []).slice(0, 5).map((res) => ({
+  const reservationActivity = reservations.slice(0, 5).map((res) => ({
     cls: reservationClass(res.status),
     title: `Hold of ${res.quantity} units · ${res.status.toLowerCase()}`,
     note: `Expires in ${relativeTime(res.expires_at)}`,
@@ -112,13 +156,13 @@ export function Overview({ token, user }: PageProps) {
 
       <div className="layout">
         <div className="left">
-          <Legend source={data ? `${scopeLabel} · live forecast` : undefined} />
+          <Legend source={scopeLabel} />
 
-          {loading ? <p className="loading">Loading live forecast…</p> : null}
+          {loading ? <p className="loading">Loading…</p> : null}
           {error ? (
             <p className="notice error">
               <span>
-                <strong>Could not load the forecast</strong>
+                <strong>Could not load the overview</strong>
                 <small>{error}</small>
               </span>
             </p>

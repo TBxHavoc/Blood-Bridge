@@ -1,6 +1,10 @@
-# Blood Bridge - database stack. PostgreSQL 16 + pgAdmin 4.
+# Blood Bridge - standalone database stack. PostgreSQL 16 + pgAdmin 4.
 # Usage:  docker compose up -d
 # The schema, seed data and views are loaded automatically on first boot.
+#
+# This stack is the database-only sandbox: it loads database/sql/*.sql directly.
+# The project-wide entry point is the root ../docker-compose.yml, where the API
+# owns the schema (SQLAlchemy create_all) and no SQL init scripts are mounted.
 
 services:
   # =============================================================================
@@ -9,7 +13,6 @@ services:
   # =============================================================================
   db:
     image: postgres:16-alpine
-    container_name: bloodbridge-db
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-bloodbridge}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bloodbridge}
@@ -33,7 +36,6 @@ services:
   # =============================================================================
   pgadmin:
     image: dpage/pgadmin4:latest
-    container_name: bloodbridge-pgadmin
     restart: unless-stopped
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@bloodbridge.sim}

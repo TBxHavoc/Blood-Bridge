@@ -1,0 +1,155 @@
+# Blood Bridge - full stack in one command: PostgreSQL + FastAPI + web frontend.
+#
+#   cp .env.example .env      # then fill in the blanks
+#   docker compose up -d --build
+#   docker compose run --rm seed          # optional: load the synthetic demo data
+#
+# The same file targets a Linux / IBM LinuxONE server: only .env changes.
+# Pointing DATABASE_URL at a Db2 DSN moves the whole app to IBM Z with no
+# rebuild (see database/docs/LINUXONE_MIGRATION_GUIDE.md).
+
+# Compose project name, so container/volume/network names stay stable.
+name: ${COMPOSE_PROJECT_NAME:-bloodbridge}
+
+# Keep container logs from filling the disk on a long-running server.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # --- PostgreSQL (local fallback; the API owns the schema) -----------------
+  # No init scripts are mounted here: app startup runs SQLAlchemy create_all()
+  # and bootstraps the admin. database/sql/*.sql belong to the standalone
+  # database/ stack and to the Db2 migration path.
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bloodbridge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bloodbridge}
+      POSTGRES_DB: ${POSTGRES_DB:-bloodbridge}
+    ports:
+      # Loopback only: reachable from a local client, never from the network.
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    volumes:
+      - bb_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bloodbridge} -d ${POSTGRES_DB:-bloodbridge}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # --- FastAPI backend ------------------------------------------------------
+  api:
+    build: ./backend
+    image: bloodbridge-api:local
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-bloodbridge}:${POSTGRES_PASSWORD:-bloodbridge}@db:5432/${POSTGRES_DB:-bloodbridge}}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-}
+      SEED_PASSWORD: ${SEED_PASSWORD:-}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      # eRaktKosh background scraper. Upstream defaults both of these on: the
+      # worker scrapes once shortly after startup and then every
+      # ERAKTKOSH_SYNC_INTERVAL_SECONDS. Set ERAKTKOSH_AUTO_SYNC_ENABLED=false
+      # to keep the API fully offline.
+      ERAKTKOSH_AUTO_SYNC_ENABLED: ${ERAKTKOSH_AUTO_SYNC_ENABLED:-true}
+      ERAKTKOSH_SYNC_INTERVAL_SECONDS: ${ERAKTKOSH_SYNC_INTERVAL_SECONDS:-600}
+      # nginx is the only client, so its X-Forwarded-For is trusted. Without
+      # this every request looks like it came from the proxy, collapsing
+      # per-IP rate limiting into one shared bucket.
+      TRUST_FORWARDED_FOR: "true"
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    volumes:
+      # The scraper writes its snapshots to /data/eraktkosh (the API reads the
+      # same path); a named volume keeps them across restarts and rebuilds.
+      - bb_scrape:/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # --- Web frontend (nginx) -------------------------------------------------
+  web:
+    build: ./frontend
+    image: bloodbridge-web:local
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      # The only publicly exposed port. Set WEB_PORT=80 on a real server.
+      - "${WEB_PORT:-8080}:80"
+    volumes:
+      # The scraper writes its JSON snapshots into the same named volume the API
+      # uses (mounted there at /data, so the files live at /data/eraktkosh).
+      # Exposing that volume through nginx publishes them at
+      # /data/eraktkosh/*.json -- the path the UI checks first -- so the browser
+      # reads the newest scrape directly each cycle without an API round-trip.
+      - bb_scrape:/usr/share/nginx/html/data:ro
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # --- One-shot demo seed (opt-in): docker compose run --rm seed ------------
+  # seed() resets every table, including `users`, which would otherwise delete
+  # the bootstrap admin that the API only creates at startup -- leaving nothing
+  # able to log in until the API is restarted. So the admin is re-asserted here
+  # in the same process, making this safe to run in any order and safe to
+  # re-run. write_csv=False keeps the tracked backend/datasets/*.csv snapshots
+  # untouched.
+  seed:
+    build: ./backend
+    image: bloodbridge-api:local
+    profiles: ["seed"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-bloodbridge}:${POSTGRES_PASSWORD:-bloodbridge}@db:5432/${POSTGRES_DB:-bloodbridge}}
+      SEED_PASSWORD: ${SEED_PASSWORD:-}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # Dedicated demo accounts (2 hospitals, 2 blood banks) — set passwords in
+      # the git-ignored root .env; usernames default in backend/app/config.py.
+      DEMO_HOSPITAL_1_PASSWORD: ${DEMO_HOSPITAL_1_PASSWORD:-}
+      DEMO_HOSPITAL_2_PASSWORD: ${DEMO_HOSPITAL_2_PASSWORD:-}
+      DEMO_BANK_1_PASSWORD: ${DEMO_BANK_1_PASSWORD:-}
+      DEMO_BANK_2_PASSWORD: ${DEMO_BANK_2_PASSWORD:-}
+    command:
+      - python
+      - -c
+      - |
+        from app.seed.bootstrap import ensure_bootstrap_admin
+        from app.seed.seed import seed
+
+        seed(write_csv=False)
+        ensure_bootstrap_admin()
+        print("Seeded the synthetic dataset and re-asserted the bootstrap admin.")
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # --- pgAdmin (opt-in): docker compose --profile tools up -d ---------------
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    profiles: ["tools"]
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@bloodbridge.sim}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "127.0.0.1:${PGADMIN_PORT:-5050}:80"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  bb_pgdata:
+    name: bloodbridge_pgdata
+  bb_scrape:
+    name: bloodbridge_scrape

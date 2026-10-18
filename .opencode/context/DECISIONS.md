@@ -261,6 +261,34 @@ the highlight rotates with the body.
 **Rejected:** separate arrays/lifetimes per component kind — the single pool plus
 one depth sort is less code, and sorting ~60 items per frame is free.
 
+### 2026-10-18 — data.gov.in fetches need a custom User-Agent
+
+**Context:** `backend/scripts/fetch_karnataka_hospitals.py` timed out on every
+request (`The read operation timed out`), including datasets that the same URL
+had served fine seconds earlier from PowerShell. Page size was not the cause —
+`limit=100` failed exactly like `limit=1000`.
+
+**Decision:** send an explicit `User-Agent` (plus `Accept: application/json`) on
+every request.
+
+**Why:** data.gov.in drops the default `Python-urllib/3.x` agent — the TCP
+connection completes and the response then never arrives, which surfaces as a
+*read* timeout rather than an HTTP error, making it look like a network or
+paging problem. Probing four agents showed the default failing while a browser
+string, a descriptive name and a named-agent+Accept all returned 200.
+
+**Rejected:** blaming page size and dropping it to 100 — a red herring that
+doubles the request count and fixes nothing. Also rejected `requests`, when
+stdlib `urllib` works once the header is set (keeps the script dependency-free).
+
+**Also recorded:** the three registries do **not** share a schema (`hospital_`
+/ `sl_no` vs `hospital` / `sl_no_`), and the private set stores 6 hospital names
+with embedded newlines (1549 physical lines for 1543 rows). The script pins
+column order and collapses whitespace, so line count == row count and re-fetches
+diff cleanly. Files live in `datasets/karnataka/` rather than `datasets/` so
+they cannot be mistaken for the ML contract files `train_model.py` reads by
+exact filename.
+
 ### 2026-10-18 — Login page resets `.box`/`.notice`; it does not just scope them
 
 **Context.** The login form is a 1:1 port of `prototypes/login page.html`, whose
@@ -291,4 +319,309 @@ touch every login selector plus the JSX for a cosmetic conflict.
 **Invariant for future work:** before adding any shared-sounding class to the
 login page (`.field`, `.submit`, `.item`, ...), grep `app.css` for that name;
 scoping gives you a win only on the properties you declare.
+
+### 2026-10-18 — One root `docker-compose.yml`; `backend/docker-compose.yml` retired
+
+**Context:** Two compose files defined the same service set. `backend/docker-compose.yml`
+(postgres + api) and `database/docker-compose.yml` (postgres + pgadmin) both declared
+service `db` with `container_name: bloodbridge-db` and both bound host 5432, so they
+could not run together. Neither built the frontend, and `backend/Dockerfile` copied
+only `app/`, so the ML/data scripts were missing from the API image.
+
+**Decision:** A single root `docker-compose.yml` brings up `db` + `api` + `web`, with
+opt-in `seed` (`profiles: ["seed"]`) and pgadmin (`profiles: ["tools"]`) services.
+Deleted `backend/docker-compose.yml`; `database/docker-compose.yml` stays as the
+DB-only sandbox that loads `database/sql/*.sql` directly. The API image now also
+copies `scripts/`, `datasets/` and `models/`, runs as unprivileged `appuser`, and
+healthchecks `/api/v1/health` — the endpoint is *under* the API prefix, not `/health`.
+
+**Why:** One entry point removes the drift and the port/name conflict, and makes the
+same file usable unchanged on a Linux/IBM LinuxONE host. The API owns the schema
+(SQLAlchemy `create_all` at startup), so no SQL init scripts are mounted into the
+root stack — that keeps `app/models.py` the single source of truth.
+
+**Rejected:** Mounting `database/sql/01_schema_postgresql.sql` into
+`/docker-entrypoint-initdb.d` for the root stack — it would create a second, divergent
+schema authority alongside the ORM models.
+
+**Rejected:** Keeping `backend/docker-compose.yml` as a convenience wrapper — it is the
+file that made the two stacks mutually exclusive.
+
+### 2026-10-18 — No `container_name`: a sibling checkout must not be collateral damage
+
+**Context:** `docker compose up` failed with `Conflict. The container name
+"/bloodbridge-db" is already in use`. The owner was a *different* project — label
+`com.docker.compose.project=ibmhackathon`, config file `D:\ibm hackathon\docker-compose.yml`
+— an older copy of this repo that hardcoded the same global name. Container names are
+global to the Docker daemon; compose's default (`<project>-<service>-<n>`) is not.
+
+**Decision:** Dropped every explicit `container_name` from the root compose. The
+containers are `bloodbridge-db-1`, `bloodbridge-api-1`, `bloodbridge-web-1`. The stale
+container from the other project was left running/exited untouched.
+
+**Why:** Namespacing by compose project is what lets two copies of this repo coexist,
+which this machine needs. Deleting the other project's container would have been
+destroying someone else's state to win a cosmetic name.
+
+**Rejected:** Renaming to `bloodbridge-dev-db` — still global, still collides the next
+time a copy uses that name.
+
+### 2026-10-18 — The web container terminates `/api`, and the API trusts its X-Forwarded-For
+
+**Context:** The dev setup relies on the Vite proxy (`vite.config.ts`, target
+`VITE_BACKend ?? 127.0.0.1:8000`) to keep the browser on one origin. A `vite build`
+output has no dev server, so that proxy does not exist in production. Separately,
+`Settings.trust_forwarded_for` defaults to `False` and `app/main.py` only honours the
+header when it is set.
+
+**Decision:** `frontend/Dockerfile` builds with node and serves via nginx.
+`frontend/nginx.conf` serves the SPA with `try_files ... /index.html` fallback and
+`location ^~ /api/` proxies to `http://api:8000` (the `^~` keeps API paths out of the
+static-asset regex). The compose sets `TRUST_FORWARDED_FOR: "true"` on the API.
+
+**Why:** One origin in production means no CORS surface and nothing to reconfigure when
+the host changes. Without the trust flag every request appears to originate from the
+proxy, collapsing per-IP login rate limiting into a single shared bucket.
+
+**Rejected:** Baking the API URL into the bundle via a Vite env var — it couples one
+image to one deployment target and re-introduces CORS.
+
+**Known trade-off:** nginx is a trusted proxy *inside* the compose network. If the API
+port were ever published beyond loopback, the header could be spoofed; the compose
+therefore binds it to `127.0.0.1` only.
+
+### 2026-10-18 — In-container seeding: profiled, CSV-free, and re-bootstraps the admin
+
+**Context:** Two traps in `app/seed/seed.py`. (1) It writes its generated rows back to
+`backend/datasets/*.csv` (`DATASETS_DIR`, `_write_csv`), so running it inside the API
+image rewrites the tracked dataset snapshots. (2) `seed()` defaults to `reset=True`,
+which deletes every table *including* `users` — and the bootstrap admin is only created
+by the API's startup lifespan. Seeding after the API had already started therefore
+deleted the admin and left `admin`/`ADMIN_PASSWORD` returning 401 while
+`docker compose ps` still showed every service healthy. Verified: `role='admin'` count
+went to 0, `hospital_h_001` still authenticated, and `docker compose restart api`
+brought `admin` back.
+
+**Decision:** Seeding is an explicit, one-shot, profiled service:
+`docker compose run --rm seed`. Its command runs `seed(write_csv=False)` and then
+`ensure_bootstrap_admin()` in the same process, and it receives `ADMIN_USERNAME` /
+`ADMIN_PASSWORD` alongside `SEED_PASSWORD`.
+
+**Why:** `write_csv=False` keeps the CSV snapshots (the ML input contract) byte-stable;
+a profile keeps a data-destroying operation out of the default `up`; and re-asserting
+the admin makes the seed safe to run in any order and safe to re-run — otherwise the
+documented quickstart left you with no working login until you thought to restart the
+API.
+
+**Rejected:** A `SEED_ON_START` env flag on the API — the same destructive write with an
+easier way to trigger it by accident.
+
+**Rejected:** Just documenting "restart the API after seeding" — that papers over the
+interaction rather than removing it, and still bites on every re-seed.
+
+### 2026-10-18 — Scrubbed the tracked JWT secret; left the SQL sandbox's `Demo2026!` in place
+
+**Context:** `database/.env.example` is tracked and contained a real-looking
+`JWT_SECRET_KEY` (64 hex chars) plus `SEED_PASSWORD=Demo2026!`. Separately,
+`database/sql/03_seed_data.sql` stores pre-computed bcrypt hashes for `Demo2026!` and
+`database/README.md` documents that password — that standalone sandbox never reads
+`SEED_PASSWORD`, so the value there is baked into the SQL, not the env.
+
+**Decision:** Blanked `JWT_SECRET_KEY`, `SEED_PASSWORD`, `DB2_PASSWORD` and
+`DATABASE_URL_DB2` in `database/.env.example`, adding generation hints — matching what
+was already done to `backend/.env.example`. Left the SQL hashes and the README text
+alone.
+
+**Why:** An `.example` file must contain placeholders, not live-looking secrets; a
+hardcoded signing key is the exact failure the app already guards against in
+production. Regenerating the SQL bcrypt hashes changes the DB team's documented demo
+credentials, which is their call, not a side effect of containerising.
+
+**Rejected:** Rewriting `03_seed_data.sql` to take the password from the environment —
+it is a static artifact loaded by `docker-entrypoint-initdb.d`, with no code path to
+hash a runtime value.
+
+### 2026-10-18 — Found: the seed's `_admin`/`_auditor` users never reach the database
+
+**Context:** Verifying the containerised stack showed the DB holding **30** users while
+the seeder printed `users: 32`. `app/seed/seed.py` builds `_admin` and `_auditor` as
+`User(...)` objects, appends them to the `users` list, and returns `len(users)` — but
+only the hospital and bank loop users are passed to `db.add()`. The two org-less demo
+accounts are never added to the session and never inserted.
+
+**Decision:** **Not fixed.** Recorded here and in `PROJECT-STATE.md` as a known gap.
+
+**Why:** It is a pre-existing bug in the seeder, not a container issue, and fixing it
+silently would change seeded-data semantics (two new admin-class logins) that the demo
+may be planned around. The bootstrap admin from `ADMIN_USERNAME`/`ADMIN_PASSWORD` is
+unaffected and does authenticate, so the stack is fully usable.
+
+**Rejected:** Adding the missing `db.add()` calls on the spot — correct in isolation,
+but it is a behavioural change to another author's tracked file that was never part of
+the containerisation brief. Flag to the owner first.
+
+**Follow-up if approved:** `db.add(user)` for both, in the same block that builds them,
+and assert the persisted row count rather than trusting `len(users)`.
+
+### 2026-10-18 — Supersedes the entry above: the seed's `_admin`/`_auditor` users now persist
+
+**Context:** The entry above recorded the missing-`db.add()` bug and deliberately left it
+unfixed pending the owner's call. The owner approved the fix.
+
+**Decision:** In `app/seed/seed.py` the two org-less demo accounts are now added with a
+single `db.add_all(users)` plus a `flush()` in the same block that constructs them, and
+the returned `users` count is read back from the database
+(`db.scalar(select(func.count()).select_from(User))`) instead of `len(users)`.
+
+**Why:** `db.add_all` is the missing half of the existing code. Counting from the
+database rather than from the in-memory list is the part that matters going forward: the
+original `len(users)` reported 32 while 30 rows existed and nothing detected the gap — a
+count that is read back cannot diverge from what was written.
+
+**Verified** in the containerised stack: `users` by role is `admin:2` (`_admin` + the
+bootstrap `admin`), `auditor:1`, `bloodbank_user:20`, `hospital_user:10` — 33 rows — and
+`_admin`, `_auditor`, `admin`, `hospital_h_001`, `bank_bb_001` all authenticate. The
+seed's own role summary also now reads 32 on its own (33 once the bootstrap admin is
+re-asserted), which is the number it always claimed.
+
+**Note:** the demo `_admin`/`_auditor` and the env-driven bootstrap `admin` all carry
+`role='admin'`/`'auditor'`. That duplication is intended — the seeded pair are demo
+fixtures, the bootstrap one is the temporary env-sourced login.
+
+### 2026-10-18 — The pulled scraper needs `scrapling[fetchers]`, not `scrapling`
+
+**Context:** `bfac9ce` embeds a background scraper. `app/services/eraktkosh_scraper.py`
+has a module-level `from scrapling import Fetcher` (line 25), and `app/main.py` imports it
+from the lifespan whenever `ERAKTKOSH_AUTO_SYNC_ENABLED` is true — which is the upstream
+default. `scrapling` was never added to `backend/requirements.txt`, so the API image
+crash-looped on startup with `ModuleNotFoundError: No module named 'scrapling'`.
+Installing the bare package only moved the failure along: `scrapling.fetchers.requests`
+imports `curl_cffi`, and then `patchright`, giving
+`No module named 'patchright'` on the next boot.
+
+**Decision:** `backend/requirements.txt` pins `scrapling[fetchers]==0.5`.
+
+**Why:** The extra is the only spec that satisfies the import chain the fetchers package
+walks at import time. It is heavier (adds playwright, patchright, browserforge, msgspec,
+Protego, curl_cffi), but the alternative is patching upstream's import. No browser
+binaries are installed: the scraper only calls `Fetcher.get`, which is HTTP, so
+`playwright install` is never needed.
+
+**Rejected:** `scrapling` alone, and `scrapling` + `curl_cffi` — both fail at import.
+Verified by watching the API crash-loop and reading each successive traceback, rather
+than guessing the full transitive set.
+
+### 2026-10-18 — The scraper writes to `/data`; give it a writable, persistent path
+
+**Context:** `eraktkosh_scraper.py` derives `PROJECT_ROOT` as four parents up from the
+module and writes to `PROJECT_ROOT/data/eraktkosh` and
+`PROJECT_ROOT/frontend/public/data/eraktkosh`. Locally that resolves to the repo root. In
+the API image the package sits at `/app/app/...`, so four parents up is `/`: the scraper
+tries `mkdir /data/eraktkosh` as `appuser` (uid 10001), hits a permission error, and the
+write loop aborts — leaving the API's `/summary` endpoint at 404.
+
+**Decision:** The Dockerfile creates `/data/eraktkosh` and
+`/frontend/public/data/eraktkosh` owned by `appuser`, and the compose mounts a
+`bb_scrape` named volume at `/data`.
+
+**Why:** Both paths are hardcoded upstream, so they must exist and be writable or the
+scrape dies part-way and the served data stays empty. The volume keeps snapshots across
+`docker compose up --build`, which otherwise recreates the container and discards them.
+
+**Rejected:** Running the API as root so `/` is writable — that trades away the
+unprivileged `appuser` hardening for a path only one optional feature touches.
+
+**Verified:** the worker logs `fetched 906 component records` and `Successfully updated
+eRaktKosh Bengaluru files for all 8 blood groups`, 17 files land in the volume owned by
+`appuser`, and `GET /api/v1/eraktkosh/bangalore/O%2B` returns `total_units=13708`,
+`record_count=273`.
+
+### 2026-10-18 — Serve the scrape volume through nginx, and fix the static-first fallback
+
+**Context:** The Live page fetched `/data/eraktkosh/summary.json` first and only fell back
+to the API if that request *threw*. Two things combined to pin it to stale data. (i)
+Nothing served `/data/eraktkosh` — the scraper writes to a container volume the web
+container never saw — so nginx's SPA fallback answered with `index.html` and a 200. (ii)
+For the group files the API fallback sat *after* the `if (res.ok)` branch, so the
+`res.json()` error on that HTML jumped straight to `catch` and the fallback was never
+reached. The blood-group table could not load live data at all.
+
+**Decision:** Mount `bb_scrape` into the web container read-only at
+`/usr/share/nginx/html/data`, and rewrite both fetches to try the static snapshot then the
+API, counting a response as usable only when it is actually JSON.
+
+**Why:** Mounting the volume makes the static path the UI already prefers genuinely live:
+nginx serves the newest scrape off disk, refreshed in place every cycle, with no API
+round-trip and no rebuild. The content-type guard is what reopens the fallback, because a
+200 that is really `index.html` has to count as a miss.
+
+**Rejected:** Making the API the only source (drops the offline/static-first design and
+adds a round-trip per view), and copying files between containers (needs a writer loop on
+top of a shared volume — more moving parts for the same result).
+
+**Verified:** `/data/eraktkosh/summary.json` now returns `application/json`;
+`POST /api/v1/eraktkosh/sync-now` moved the served `last_updated_iso` from `23:46:25` to
+`23:51:28` with no rebuild — precisely the change the page's 30s poll keys on.
+
+### 2026-10-18 — Inventory / Find Supplies / Overview now show live eRaktKosh data, not the seeded demo inventory
+
+**Context:** Inventory, Find Supplies, and Overview rendered `api.depletion` /
+`api.inventory` (PostgreSQL, seeded from `backend/datasets/*.csv` demo data), while
+only LiveERaktKosh showed the scraped eRaktKosh Bengaluru stock. The user wanted the
+newly scraped data visible across the entire website and the old demo data removed.
+
+**Decision:** Replace those three pages' data source with the scraped eRaktKosh data:
+`GET /eraktkosh/summary` for per-group units (Inventory stat strip, Overview BloodBoxes)
+and a new `GET /eraktkosh/supply` endpoint that unions all 8 group snapshots and
+dedupes by blood-bank name using each record's `all_groups` breakdown (Find Supplies per-bank
+ranking). `StockItem.hours` became `number | null` (scraped data is a point-in-time
+snapshot with no consumption rate or expiry); `BloodBox` renders null hours as
+units-based availability with "—" time. The old demo inventory remains in the DB but is
+no longer rendered by these pages. RequestBlood's matching engine still reads DB
+inventory (distance/ETA matching) — that is a separate computational feature left as-is.
+
+**Why:** The scraped data is the live source of truth (refreshed every 10 min by the
+background worker, verified advancing `23:51:28 → 00:13:10`). Serving it through the
+existing static-volume mount (`bb_scrape` → nginx `/data/eraktkosh`) plus the new
+`/supply` endpoint needs no frontend build on each scrape and no rebuild.
+
+**Rejected:** Syncing scraped data into the PostgreSQL inventory tables (would require a
+writer loop, schema mapping for burn-rate/expiry that scraped data lacks, and would clobber
+the blood-bank "Add stock" write path); keeping demo and live side-by-side (user asked for
+old data removed).
+
+**Verified:** `tsc && vite build` clean; `/eraktkosh/supply` → 98 banks; `/summary`
+`last_updated_iso` advances on each 10-min cycle; SPA 200.
+
+### 2026-10-18 — Per-org inventory: blood banks see their own DB stock, hospitals do not hold inventory
+
+**Context:** Inventory/Overview previously showed live eRaktKosh scraped stock for
+everyone. The user wants each hospital and blood bank to see only its own
+inventory, and the old demo data removed from those pages.
+
+**Decision:** Make Inventory/Overview role-aware:
+- `bloodbank_user` → own `BloodInventory` via `api.inventory()` (server-scoped to
+  `affiliated_org_id`) + `AddStockForm` write path. Never eRaktKosh.
+- `hospital_user` → no inventory table exists for hospitals
+  (`BloodInventory.blood_bank_id` only); the page says so and links to "Request
+  blood". Hospitals see their own requests instead.
+- `admin`/`auditor` → live eRaktKosh summary (they are neither a hospital nor a
+  bank).
+Added 4 dedicated demo accounts (2 hospitals, 2 blood banks) with individual
+env-driven passwords (`DEMO_HOSPITAL_1/2_PASSWORD`, `DEMO_BANK_1/2_PASSWORD`,
+defaults for usernames), affiliated to 2 hospitals + 2 blood banks. Verified each
+blood bank logs in and sees only its own stock.
+
+**Why:** Keeps inventory as the blood-bank's domain (matches the schema and the
+"Add stock" write path) without inventing a hospital-inventory table. Demo
+accounts let the user verify per-org isolation immediately.
+
+**Rejected:** Giving hospitals a blood-bank-style inventory table (new table +
+migrations + seed + matching-engine changes — out of scope); keeping demo and
+live side-by-side (user asked for old data removed).
+
+**Verified:** All 4 demo accounts + admin log in; `demo_bank_1` and
+`demo_bank_2` see different stock (per-bank isolation confirmed);
+`tsc && vite build` clean.
+
 
