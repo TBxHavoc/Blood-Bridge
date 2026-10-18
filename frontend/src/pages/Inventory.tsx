@@ -233,7 +233,11 @@ export function Inventory({ token, user }: PageProps) {
                         type="button"
                         className="restock"
                         aria-label={`Restock ${item.type}`}
-                        onClick={() => go("Find supplies", { type: item.type })}
+                        onClick={() =>
+                          go(user?.role === "bloodbank_user" ? "Request inbox" : "Find supplies", {
+                            type: item.type,
+                          })
+                        }
                       >
                         Restock
                       </button>

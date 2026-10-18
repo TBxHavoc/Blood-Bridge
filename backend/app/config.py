@@ -42,7 +42,9 @@ class Settings(BaseSettings):
     # --- CORS ---
     # Kept as a comma-separated string so pydantic-settings does not try to
     # JSON-decode it as a "complex" field; use `.cors_origin_list` for the list.
-    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    cors_origins: str = (
+        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174"
+    )
 
     # --- Proxies ---
     # Only honor a client-supplied X-Forwarded-For header when the app runs

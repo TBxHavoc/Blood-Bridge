@@ -1258,3 +1258,238 @@ h1 {
     transition: none;
   }
 }
+
+/* ============================================================
+   Request Inbox — Blood Manager portal
+   ============================================================ */
+
+#request-inbox .search {
+  margin-bottom: 0.5rem;
+}
+
+.inbox-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.inbox-table th {
+  position: sticky;
+  top: 0;
+  padding: 14px 16px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: left;
+  color: var(--muted);
+  background: var(--paper);
+  border-bottom: 2px solid var(--line);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.inbox-table td {
+  padding: 14px 16px;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.92rem;
+}
+
+/* Row states */
+.inbox-row {
+  transition: background 0.12s;
+  cursor: default;
+}
+.inbox-row:hover {
+  background: rgba(163, 20, 36, 0.03);
+}
+.inbox-row.urgency-emergency {
+  border-left: 4px solid var(--crit);
+}
+.inbox-row.urgency-urgent {
+  border-left: 4px solid var(--warn);
+}
+.inbox-row.urgency-routine {
+  border-left: 4px solid var(--good);
+}
+
+/* Hospital name cell */
+.hospital-name {
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 2px;
+}
+.hospital-code {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+/* Distance */
+.distance {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Urgency badge */
+.urgency-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 9999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.urgency-badge.urgency-emergency {
+  background: var(--crit-bg);
+  color: var(--crit);
+  border: 1px solid rgba(179, 18, 31, 0.25);
+}
+.urgency-badge.urgency-urgent {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border: 1px solid rgba(161, 98, 7, 0.25);
+}
+.urgency-badge.urgency-routine {
+  background: var(--good-bg);
+  color: var(--good);
+  border: 1px solid rgba(31, 122, 77, 0.25);
+}
+
+/* Pulsing dot for emergencies */
+.urgency-pulse {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--crit);
+  animation: inbox-pulse 1.5s ease-in-out infinite;
+  box-shadow: 0 0 0 0 rgba(179, 18, 31, 0.4);
+}
+@keyframes inbox-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(179, 18, 31, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(179, 18, 31, 0);
+  }
+}
+
+/* Blood units ordered cell */
+.units-ordered {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.units-ordered b {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.blood-type-tag {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 5px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  background: var(--red-tint);
+  color: var(--red);
+  letter-spacing: 0.02em;
+  border: 1px solid rgba(163, 20, 36, 0.18);
+}
+.component-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  display: block;
+  width: 100%;
+}
+
+/* Status chip */
+.status-chip {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 5px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.status-open {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+.status-held {
+  background: var(--low-bg);
+  color: var(--low);
+}
+.status-confirmed {
+  background: var(--good-bg);
+  color: var(--good);
+}
+.status-fulfilled {
+  background: var(--good-bg);
+  color: var(--good);
+}
+.status-cancelled,
+.status-expired {
+  background: var(--crit-bg);
+  color: var(--crit);
+}
+
+/* Time column */
+.time-col {
+  color: var(--muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+/* Filter bar and chips */
+.inbox-filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.inbox-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.filter-chip {
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.filter-chip:hover {
+  background: var(--subtle);
+  color: var(--ink);
+}
+.filter-chip.active {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.filter-chip.chip-emergency.active {
+  background: var(--crit);
+  color: #ffffff;
+  border-color: var(--crit);
+}
+.filter-chip.chip-urgent.active {
+  background: var(--warn);
+  color: #ffffff;
+  border-color: var(--warn);
+}
+.filter-chip.chip-routine.active {
+  background: var(--good);
+  color: #ffffff;
+  border-color: var(--good);
+}
+.strip .cell.cell-active {
+  box-shadow: inset 0 -3px 0 var(--red);
+  background: var(--subtle);
+}

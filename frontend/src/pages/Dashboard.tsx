@@ -14,6 +14,7 @@ import type { PageProps } from "../app/PageProps";
 import { Overview } from "./Overview";
 import { Inventory } from "./Inventory";
 import { FindSupplies } from "./FindSupplies";
+import { RequestInbox } from "./RequestInbox";
 import { RequestBlood } from "./RequestBlood";
 import { Reports } from "./Reports";
 import { Faq } from "./Faq";
@@ -48,6 +49,7 @@ export function Dashboard({ token, user }: PageProps) {
           {view === "Overview" ? <Overview token={token} user={user} /> : null}
           {view === "Inventory" ? <Inventory token={token} user={user} /> : null}
           {view === "Find supplies" ? <FindSupplies token={token} user={user} /> : null}
+          {view === "Request inbox" ? <RequestInbox token={token} user={user} /> : null}
           {view === "Live eRaktKosh" ? <LiveERaktKosh /> : null}
           {view === "Request blood" ? <RequestBlood token={token} user={user} /> : null}
           {view === "Reports" ? <Reports token={token} user={user} /> : null}
@@ -57,3 +59,4 @@ export function Dashboard({ token, user }: PageProps) {
     </NavContext.Provider>
   );
 }
+

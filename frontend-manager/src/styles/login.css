@@ -1,0 +1,217 @@
+/* ============================================================
+   Login — ported from prototypes/login page.html.
+   Selectors are scoped under `.login-page`, which wins ties against
+   the dashboard stylesheet for any property it declares... but
+   `.box` and `.notice` are ALSO defined in app.css (alert card /
+   green banner). Scoping alone does not neutralise properties a
+   rule never declares, so those two carry explicit resets below.
+   When adding a shared name here (.field, .submit, h1, ...), check
+   app.css first — see DECISIONS.md.
+   ============================================================ */
+
+.login-page {
+  /* the sign-in canvas is slightly warmer/whiter than the dashboard */
+  --paper: #f9f7f7;
+  --line: #dcd3d4;
+
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 100vh;
+  background: var(--white);
+}
+
+/* ---------- Left: animated brand panel ---------- */
+.login-page .brand {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 44px 52px;
+  overflow: hidden;
+  color: #fff;
+  background:
+    radial-gradient(ellipse at 40% 90%, rgba(214, 60, 70, 0.38), transparent 62%),
+    radial-gradient(ellipse at 25% 8%, rgba(190, 40, 55, 0.35), transparent 55%),
+    linear-gradient(160deg, #8a1020 0%, #5a0a15 55%, #3b060d 100%);
+}
+.login-page .brand canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.login-page .brand > :not(canvas) {
+  position: relative;
+  z-index: 1;
+}
+
+.login-page .logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+.login-page .logo svg {
+  width: 26px;
+  height: 26px;
+}
+
+.login-page .pitch {
+  max-width: 430px;
+  text-shadow: 0 1px 14px rgba(40, 0, 6, 0.55);
+}
+.login-page .pitch h2 {
+  margin: 0 0 14px;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 2.7rem;
+  line-height: 1.1;
+  font-weight: 700;
+}
+.login-page .pitch p {
+  margin: 0;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+/* ---------- Right: form ---------- */
+.login-page .panel {
+  display: grid;
+  place-items: center;
+  padding: 40px 28px;
+  background: var(--white);
+}
+/* app.css also defines `.box` — the dashboard's alert card — and that rule still
+   matches inside the login page, so the form wrapper was inheriting a border,
+   radius, shadow and background. The prototype's `.box` is a bare width
+   wrapper, so reset the chrome it never had. */
+.login-page .box {
+  display: block;
+  width: 100%;
+  max-width: 380px;
+  overflow: visible;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.login-page h1 {
+  margin: 0 0 10px;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 2.8rem;
+  line-height: 1.05;
+  font-weight: 700;
+  color: var(--red-deep);
+}
+.login-page .sub {
+  margin: 0 0 32px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.login-page .field {
+  margin-bottom: 20px;
+}
+.login-page label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.login-page input {
+  width: 100%;
+  padding: 13px 14px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.login-page input:focus {
+  outline: none;
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px rgba(163, 20, 36, 0.14);
+}
+.login-page input[aria-invalid="true"] {
+  border-color: var(--red);
+}
+.login-page .err {
+  min-height: 1.1em;
+  margin: 6px 0 0;
+  font-size: 0.82rem;
+  color: var(--red);
+}
+.login-page .forgot {
+  display: inline-block;
+  margin: -4px 0 24px;
+  font-size: 0.85rem;
+  color: var(--red);
+  text-decoration: none;
+}
+.login-page .forgot:hover {
+  text-decoration: underline;
+}
+.login-page .forgot:focus-visible,
+.login-page .submit:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 3px;
+}
+.login-page .submit {
+  width: 100%;
+  padding: 14px;
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  background: var(--red);
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.login-page .submit:hover {
+  background: var(--red-deep);
+}
+.login-page .submit:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+.login-page .status {
+  min-height: 1.2em;
+  margin: 14px 0 0;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--red);
+}
+/* Same collision: app.css `.notice` is the green status banner (background,
+   border, radius, flex). The prototype's is a plain line of small print. */
+.login-page .notice {
+  display: block;
+  margin: 28px 0 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+/* ---------- Responsive ---------- */
+@media (max-width: 760px) {
+  .login-page {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+  .login-page .brand {
+    padding: 22px 24px;
+    min-height: 120px;
+  }
+  .login-page .pitch {
+    display: none;
+  }
+  .login-page .panel {
+    align-items: start;
+  }
+  .login-page h1 {
+    font-size: 2.3rem;
+  }
+}

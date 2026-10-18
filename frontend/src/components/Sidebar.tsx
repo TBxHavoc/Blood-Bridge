@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { useNav, HELP_ITEM, getWorkspaceItems, type ViewName } from "../app/NavContext";
 
-import { useNav, HELP_ITEM, WORKSPACE_ITEMS, type ViewName } from "../app/NavContext";
 import { relativeTime } from "../lib/blood";
 import { roleLabel } from "../lib/session";
 import type { User } from "../lib/types";
@@ -11,6 +11,7 @@ import {
   DropIcon,
   GridIcon,
   HelpIcon,
+  InboxIcon,
   LogoutIcon,
   PulseIcon,
   SearchIcon,
@@ -21,11 +22,13 @@ const ICONS: Record<ViewName, (props: { className?: string }) => JSX.Element> = 
   Overview: GridIcon,
   Inventory: CubeIcon,
   "Find supplies": SearchIcon,
+  "Request inbox": InboxIcon,
   "Live eRaktKosh": PulseIcon,
   "Request blood": DropIcon,
   Reports: DocIcon,
   FAQ: HelpIcon,
 };
+
 
 interface SidebarProps {
   orgName: string;
@@ -191,7 +194,7 @@ export function Sidebar({ orgName, user, onSignOut }: SidebarProps) {
         Workspace
       </div>
       <nav aria-labelledby="workspace">
-        {WORKSPACE_ITEMS.map(({ view: itemView, label }) => {
+        {getWorkspaceItems(user.role).map(({ view: itemView, label }) => {
           const Icon = ICONS[itemView];
           return (
             <button
@@ -203,10 +206,22 @@ export function Sidebar({ orgName, user, onSignOut }: SidebarProps) {
             >
               <Icon />
               {label}
+              {itemView === "Request inbox" ? (
+                <span className="badge-count" style={{
+                  marginLeft: "auto",
+                  background: "var(--crit)",
+                  color: "#fff",
+                  fontSize: "0.72rem",
+                  fontWeight: 700,
+                  padding: "2px 7px",
+                  borderRadius: "999px"
+                }}>2</span>
+              ) : null}
             </button>
           );
         })}
       </nav>
+
 
       <div className="faq">
         <button

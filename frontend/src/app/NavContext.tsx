@@ -6,6 +6,7 @@ export type ViewName =
   | "Overview"
   | "Inventory"
   | "Find supplies"
+  | "Request inbox"
   | "Request blood"
   | "Reports"
   | "Live eRaktKosh"
@@ -30,6 +31,27 @@ export function useNav(): NavValue {
   return ctx;
 }
 
+export function getWorkspaceItems(role?: string): { view: ViewName; label: string }[] {
+  if (role === "bloodbank_user") {
+    return [
+      { view: "Overview", label: "Overview" },
+      { view: "Inventory", label: "Inventory" },
+      { view: "Request inbox", label: "Request inbox" },
+      { view: "Live eRaktKosh", label: "Live Bangalore Stock" },
+      { view: "Request blood", label: "Request blood" },
+      { view: "Reports", label: "Reports" },
+    ];
+  }
+  return [
+    { view: "Overview", label: "Overview" },
+    { view: "Inventory", label: "Inventory" },
+    { view: "Find supplies", label: "Find supplies" },
+    { view: "Live eRaktKosh", label: "Live Bangalore Stock" },
+    { view: "Request blood", label: "Request blood" },
+    { view: "Reports", label: "Reports" },
+  ];
+}
+
 export const WORKSPACE_ITEMS: { view: ViewName; label: string }[] = [
   { view: "Overview", label: "Overview" },
   { view: "Inventory", label: "Inventory" },
@@ -43,3 +65,4 @@ export const HELP_ITEM: { view: ViewName; label: string } = {
   view: "FAQ",
   label: "FAQ",
 };
+
