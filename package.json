@@ -1,0 +1,12 @@
+{
+  "name": "blood-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Blood Bridge - Intelligent Blood Allocation & Real-time Tracking Platform",
+  "scripts": {
+    "build": "npm --prefix frontend run build",
+    "dev": "npm --prefix frontend run dev",
+    "preview": "npm --prefix frontend run preview",
+    "typecheck": "npm --prefix frontend run typecheck"
+  }
+}
